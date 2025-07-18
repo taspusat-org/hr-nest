@@ -593,7 +593,7 @@ export class KaryawanService {
           trx.raw('0 AS masuk'),
           trx.raw('0 AS keluar'),
           trx.raw(
-            '(CASE WHEN ISNULL(A.statusnonhitung, 147)=147 THEN 1 else 0 END) as keluarprediksi',
+            '(CASE WHEN ISNULL(A.statusnonhitung, 147) IN (147,150) THEN 1 else 0 END) as keluarprediksi',
           ),
           trx.raw('4 AS typedata'), // Added typedata as in the original SQL query
           trx.raw('1 AS nonkartucuti'),
@@ -1568,11 +1568,11 @@ export class KaryawanService {
               trx.raw('0 AS masuk'),
               trx.raw('0 AS keluar'),
               trx.raw(
-                '(CASE WHEN ISNULL(A.statusnonhitung, 147)=147 THEN 1 else 0 END) as keluarprediksi',
+                '(CASE WHEN ISNULL(A.statusnonhitung, 147) in (147,150) THEN 1 else 0 END) as keluarprediksi',
               ),
               trx.raw('4 AS typedata'), // Added typedata as in the original SQL query
               trx.raw('1 AS nonkartucuti'),
-              trx.raw('0 AS cutiid'),
+              trx.raw('A.id AS cutiid'),
             )
             .from('cuti AS A')
             .innerJoin('cutidetail AS B', function () {

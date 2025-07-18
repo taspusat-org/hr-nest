@@ -38,9 +38,9 @@ export class BotController {
     await this.botService.sendBulkMessages(numbers, message, count);
     return `${count} pesan berhasil dikirim ke ${numbers.length} nomor`;
   }
-  @Post('send')
-  async send(@Body() dto: any): Promise<{ success: boolean }> {
-    await this.botService.sendWhatsappMessage2(dto.numbers, dto.namakaryawan);
-    return { success: true };
-  }
+  // @Post('send')
+  // async send(@Body() dto: any): Promise<{ success: boolean }> {
+  //   await this.botService.sendWhatsappMessage2(dto.tgllahir);
+  //   return { success: true };
+  // }
 }

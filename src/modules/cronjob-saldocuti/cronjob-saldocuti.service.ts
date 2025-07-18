@@ -70,8 +70,30 @@ export class CronjobSaldocutiService {
       );
     }
   }
+  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
+  async handleBirthday() {
+    const trx = await dbMssql.transaction();
+    const ptgl = this.getTodayDateBirthday(); // Mendapatkan tanggal hari ini dalam format MM-DD
 
+    try {
+      // Mengirim tanggal MM-DD ke fungsi sendWhatsappMessage2
+      await this.botService.sendWhatsappMessage2(ptgl, trx);
+      await trx.commit(); // Commit transaksi jika proses berhasil
+    } catch (error) {
+      await trx.rollback(); // Rollback transaksi jika terjadi error
+      console.error('Error saat menjalankan proses saldo awal', error);
+    }
+  }
   // Fungsi untuk mendapatkan tanggal hari ini dalam format YYYY-MM-DD
+
+  // Fungsi untuk mendapatkan tanggal hari ini dalam format MM-DD
+  private getTodayDateBirthday(): string {
+    const today = new Date();
+    const month = String(today.getMonth() + 1).padStart(2, '0'); // Menambah '0' di depan bulan jika kurang dari 10
+    const day = String(today.getDate()).padStart(2, '0'); // Menambah '0' di depan hari jika kurang dari 10
+    return `${month}-${day}`; // Format MM-DD
+  }
+
   private getTodayDate(): string {
     const today = new Date();
     const yyyy = today.getFullYear();

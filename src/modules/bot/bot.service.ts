@@ -3,6 +3,7 @@ import TelegramBot from 'node-telegram-bot-api'; // Menggunakan import jika meng
 import { Client, ClientOptions, LocalAuth, Message } from 'whatsapp-web.js';
 import * as qrcode from 'qrcode-terminal';
 import { dbMssql } from 'src/common/utils/db';
+import puppeteer from 'puppeteer-core';
 @Injectable()
 export class BotService {
   private bot: TelegramBot;
@@ -47,11 +48,13 @@ export class BotService {
   // Fungsi untuk mengirim pesan ke grup
   async sendMessage(message: string): Promise<void> {
     try {
-      await this.bot.sendMessage(this.chatId, message);
+      await this.whatsappClient.sendMessage('081321232720@c.us', message);
+      console.log('berhasil');
     } catch (error) {
       console.error('Error saat mengirim pesan ke Telegram:', error);
     }
   }
+
   async sendWhatsappMessage(message: string): Promise<void> {
     try {
       await this.whatsappClient.sendMessage(this.whatsappGroupId, message);

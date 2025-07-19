@@ -60,6 +60,7 @@
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "path": "^0.12.7",
+    "puppeteer-core": "^24.14.0",
     "qrcode-terminal": "^0.12.0",
     "redis": "^4.7.0",
     "reflect-metadata": "^0.2.2",
@@ -67,7 +68,7 @@
     "sharp": "^0.33.5",
     "socket.io": "^4.8.1",
     "typeorm": "^0.3.20",
-    "whatsapp-web.js": "^1.30.0",
+    "whatsapp-web.js": "^1.31.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {

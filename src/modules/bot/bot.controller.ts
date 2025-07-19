@@ -26,8 +26,14 @@ export class BotController {
     }
   }
   @Post('send-message')
-  async sendMessage(): Promise<string> {
+  async sendMessage(@Body() body: { message: string }): Promise<string> {
     await this.botService.sendMessageToNumbers();
+    return `Pesan berhasil dikirim ke nomor`;
+  }
+  @Post('send-message2')
+  async sendMessage2(@Body() body: { message: string }): Promise<string> {
+    const { message } = body;
+    await this.botService.sendMessage(message);
     return `Pesan berhasil dikirim ke nomor`;
   }
   @Post('send-bulk-message')

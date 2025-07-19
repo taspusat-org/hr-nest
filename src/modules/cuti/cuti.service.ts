@@ -800,6 +800,9 @@ export class CutiService {
           table.string('statusapprovalhrd');
           table.string('tglapprovalhrd');
           table.string('userapprovalhrd');
+          table.string('statusapproval_text');
+          table.string('statusapproval_memo');
+          table.integer('statusapproval');
           table.text('info');
           table.string('modifiedby');
           table.integer('jenjangapproval');
@@ -817,6 +820,9 @@ export class CutiService {
           t.integer('cuti_id');
           t.integer('karyawan_id');
           t.integer('jenjangapproval');
+          t.integer('statusapproval');
+          t.string('statusapproval_text');
+          t.string('statusapproval_memo');
         });
         await trx(tempApprovalCuti).insert(
           trx
@@ -825,8 +831,12 @@ export class CutiService {
               'ca.cuti_id',
               'ca.karyawan_id',
               'ca.jenjangapproval',
+              'ca.statusapproval',
+              'p.text as statusapproval_text',
+              'p.memo as statusapproval_memo',
             )
             .from('cutiapproval as ca')
+            .leftJoin('parameter as p', 'p.id', 'ca.statusapproval')
             .where('ca.karyawan_id', '=', karyawan_id),
         );
 
@@ -878,6 +888,7 @@ export class CutiService {
             0,
             trx,
           );
+        console.log(await trx(tempApprovalCuti));
         // Langkah 2: Ambil data cuti berdasarkan cuti_id yang ada di cutiApproval
         const data = await trx('cuti as c')
           .select([
@@ -910,6 +921,9 @@ export class CutiService {
             'c.statusapprovalhrd',
             'c.tglapprovalhrd',
             'c.userapprovalhrd',
+            'ca.statusapproval_text as statusapproval_text',
+            'ca.statusapproval_memo as statusapproval_memo',
+            'ca.statusapproval as statusapproval',
             'c.info',
             'c.modifiedby',
             'ca.jenjangapproval',
@@ -981,6 +995,9 @@ export class CutiService {
         'a.jatahcuti',
         'a.sisacuti',
         'a.prediksicuti',
+        'a.statusapproval',
+        'a.statusapproval_text',
+        'a.statusapproval_memo',
         trx.raw('COUNT(*) OVER() AS __total_items'),
         trx.raw(`
           (SELECT cd.id, cd.tglcuti, cd.periodecutidari, cd.periodecutisampai, cd.info, cd.modifiedby, 

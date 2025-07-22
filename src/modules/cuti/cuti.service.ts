@@ -888,7 +888,6 @@ export class CutiService {
             0,
             trx,
           );
-        console.log(await trx(tempApprovalCuti));
         // Langkah 2: Ambil data cuti berdasarkan cuti_id yang ada di cutiApproval
         const data = await trx('cuti as c')
           .select([

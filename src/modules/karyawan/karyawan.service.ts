@@ -946,8 +946,8 @@ export class KaryawanService {
       // If iskartucuti is not 1
       if (tahun == 0) {
         // Use the current date and reset time to midnight (same logic as SQL)
-        tglakhir = new Date();
-        tglakhir.setHours(0, 0, 0, 0); // Reset time to midnight
+        tglakhir = new Date(Date.UTC(currentYear, 11, 31)); // December 31st of the current year at UTC midnight
+        tglakhir.setDate(tglakhir.getDate()); // Subtract 1 day to match SQL logic
       } else {
         // Set tglakhir to December 31st of the given year
         tglakhir = new Date(Date.UTC(tahun, 11, 31)); // December 31st of the given year at UTC midnight

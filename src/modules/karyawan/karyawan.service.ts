@@ -1767,10 +1767,10 @@ export class KaryawanService {
           'a.keluar',
           'a.keluarprediksi',
           trx.raw(
-            'SUM(a.masuk - a.keluar) OVER (PARTITION BY a.karyawan_id ORDER BY a.karyawan_id, (CASE WHEN ISNULL(a.cuti_id, 0) = 0 THEN a.tglbukti ELSE a.tglpengajuan END) ASC) AS saldo',
+            'SUM(a.masuk - a.keluar) OVER (PARTITION BY a.karyawan_id ORDER BY a.karyawan_id,a.tglbukti, (CASE WHEN ISNULL(a.cuti_id, 0) = 0 THEN a.tglbukti ELSE a.tglpengajuan END) ASC) AS saldo',
           ),
           trx.raw(
-            'SUM(a.masuk - a.keluarprediksi) OVER (PARTITION BY a.karyawan_id ORDER BY a.karyawan_id, (CASE WHEN ISNULL(a.cuti_id, 0) = 0 THEN a.tglbukti ELSE a.tglpengajuan END) ASC) AS saldoprediksi',
+            'SUM(a.masuk - a.keluarprediksi) OVER (PARTITION BY a.karyawan_id ORDER BY a.karyawan_id,a.tglbukti, (CASE WHEN ISNULL(a.cuti_id, 0) = 0 THEN a.tglbukti ELSE a.tglpengajuan END) ASC) AS saldoprediksi',
           ),
           'a.cuti_id',
           'a.typedata',
@@ -2217,7 +2217,13 @@ export class KaryawanService {
             )
             .whereRaw('ISNULL(b.karyawan_id,0)=0'),
         );
-        const result = await trx(temphasildatarekap).select('*');
+        const result = await trx(temphasildatarekap)
+          .select(
+            'karyawan_id',
+            trx.raw('MAX(jatahcuti) as jatahcuti'),
+            trx.raw('MAX(terpakai) as terpakai'),
+          )
+          .groupBy('karyawan_id');
         return result;
         // const result = await trx(`${tempJatahCutiHasil2} as a`)
         //   .select(

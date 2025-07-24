@@ -1,10 +1,6 @@
 import type { Knex } from 'knex';
 
 export async function up(knex: Knex): Promise<void> {
-  const hasParameters = await knex.schema.hasTable('parameter');
-  if (hasParameters) {
-    await knex.schema.dropTable('parameter');
-  }
   await knex.schema.createTable('parameter', (table) => {
     table.increments('id').primary();
     table.string('grp', 255).nullable();
@@ -12,7 +8,7 @@ export async function up(knex: Knex): Promise<void> {
     table.string('kelompok', 255).nullable();
     table.string('text', 255).nullable();
     table.text('memo').nullable();
-    table.integer('type', 100).nullable();
+    table.string('type', 100).nullable();
     table.string('default', 255).nullable();
     table.string('modifiedby', 50).nullable();
     table.text('info').nullable();

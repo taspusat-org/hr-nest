@@ -99,7 +99,6 @@ export class KaryawanService {
           dbMssql.raw(
             "FORMAT(k.updated_at, 'dd-MM-yyyy HH:mm:ss') AS updated_at",
           ),
-
           'p1.memo as statusaktif_memo',
           'p1.text as statusaktif_text',
           'p2.text as statuskerja_text',
@@ -107,7 +106,6 @@ export class KaryawanService {
           'p4.text as jeniskelamin_text',
           'p5.text as golongandarah_text',
           'p6.text as agama_text',
-
           'a.nama as approval_nama',
           'shift.nama as shift_nama',
           'c.nama as cabang_nama',
@@ -134,7 +132,6 @@ export class KaryawanService {
         .leftJoin('parameter as thr', 'k.thr_id', 'thr.id')
         .leftJoin('daftaremail as de', 'k.daftaremail_id', 'de.id')
         .leftJoin('logabsensi as la', 'k.absen_id', 'la.id')
-
         .whereNull('k.tglresign');
 
       query.limit(limit).offset(offset);
@@ -201,7 +198,18 @@ export class KaryawanService {
       }
 
       if (sort?.sortBy && sort?.sortDirection) {
-        query.orderBy(sort.sortBy, sort.sortDirection);
+        // Sorting based on the actual column (not the formatted string)
+        if (sort.sortBy === 'tglmasukkerja') {
+          query.orderBy('k.tglmasukkerja', sort.sortDirection);
+        } else if (sort.sortBy === 'tgllahir') {
+          query.orderBy('k.tgllahir', sort.sortDirection);
+        } else if (sort.sortBy === 'tglmutasi') {
+          query.orderBy('k.tglmutasi', sort.sortDirection);
+        } else if (sort.sortBy === 'tglresign') {
+          query.orderBy('k.tglresign', sort.sortDirection);
+        } else {
+          query.orderBy(sort.sortBy, sort.sortDirection);
+        }
       }
 
       const result = await dbMssql(this.tableName).count('id as total').first();
@@ -225,6 +233,7 @@ export class KaryawanService {
       throw new Error(error);
     }
   }
+
   async rekapCuti(id: string, isoverview: any, trx: any) {
     const tempCuti =
       '##temp_cuti_' + Math.random().toString(36).substring(2, 8);

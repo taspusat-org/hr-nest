@@ -758,9 +758,22 @@ export class CutiService {
       throw new Error(`Error fetching overview cuti: ${error.message}`);
     }
   }
+  async getCutiSaldoKaryawan(karyawan_id: string, cuti_id: any, trx: any) {
+    const datatempJatahCutiHasil2 =
+      await this.karyawanService.rekapCutiAllKaryawan(
+        [karyawan_id], // Gabungkan karyawan_id menjadi string dengan koma sebagai pemisah
+        0,
+        0,
+        0,
+        trx,
+      );
+    const data = await trx(datatempJatahCutiHasil2)
+      .select('jatahcuti', 'sisacuti', 'prediksicuti')
+      .where('cuti_id', cuti_id);
+    return data;
+  }
   async findCutiApproval(
     { search, filters, pagination, sort }: FindAllParams,
-    isproses: any,
     trx: any,
   ) {
     try {
@@ -768,244 +781,242 @@ export class CutiService {
       if (!karyawan_id) {
         throw new Error('karyawan_id is required');
       }
-      const tempTableName = `cuti_approval_cache_${karyawan_id}`;
+      // const tempTableName = `cuti_approval_cache_${karyawan_id}`;
 
-      if (isproses == 'false') {
-        await trx.schema.dropTableIfExists(tempTableName);
-        await trx.schema.createTable(tempTableName, (table) => {
-          table.integer('id'); // Auto-increment primary key
-          table.integer('karyawan_id').notNullable();
-          table.text('namakaryawan');
-          table.string('fotokaryawan');
-          table.string('namaalias');
-          table.text('tglcuti');
-          table.datetime('tglpengajuan');
-          table.string('statuscuti');
-          table.string('statuscuti_memo');
-          table.string('statuscuti_text');
-          table.integer('statuscutibatal');
-          table.string('statuscutibatal_memo');
-          table.string('nohp');
-          table.text('alasanpenolakan');
-          table.text('alasancuti');
-          table.integer('jumlahcuti');
-          table.integer('kategoricuti_id');
-          table.string('kategoricuti_memo');
-          table.string('statusnonhitung');
-          table.string('statusnonhitung_nama');
-          table.text('lampiran');
-          table.string('statusapprovalatasan');
-          table.string('tglapprovalatasan');
-          table.string('userapprovalatasan');
-          table.string('statusapprovalhrd');
-          table.string('tglapprovalhrd');
-          table.string('userapprovalhrd');
-          table.string('statusapproval_text');
-          table.string('statusapproval_memo');
-          table.integer('statusapproval');
-          table.text('info');
-          table.string('modifiedby');
-          table.integer('jenjangapproval');
-          table.datetime('created_at');
-          table.datetime('updated_at');
-          table.integer('jatahcuti');
-          table.integer('sisacuti');
-          table.integer('prediksicuti');
-        });
+      // if (isproses == 'false') {
+      // await trx.schema.dropTableIfExists(tempTableName);
+      // await trx.schema.createTable(tempTableName, (table) => {
+      //   table.integer('id'); // Auto-increment primary key
+      //   table.integer('karyawan_id').notNullable();
+      //   table.text('namakaryawan');
+      //   table.string('fotokaryawan');
+      //   table.string('namaalias');
+      //   table.text('tglcuti');
+      //   table.datetime('tglpengajuan');
+      //   table.string('statuscuti');
+      //   table.string('statuscuti_memo');
+      //   table.string('statuscuti_text');
+      //   table.integer('statuscutibatal');
+      //   table.string('statuscutibatal_memo');
+      //   table.string('nohp');
+      //   table.text('alasanpenolakan');
+      //   table.text('alasancuti');
+      //   table.integer('jumlahcuti');
+      //   table.integer('kategoricuti_id');
+      //   table.string('kategoricuti_memo');
+      //   table.string('statusnonhitung');
+      //   table.string('statusnonhitung_nama');
+      //   table.text('lampiran');
+      //   table.string('statusapprovalatasan');
+      //   table.string('tglapprovalatasan');
+      //   table.string('userapprovalatasan');
+      //   table.string('statusapprovalhrd');
+      //   table.string('tglapprovalhrd');
+      //   table.string('userapprovalhrd');
+      //   table.string('statusapproval_text');
+      //   table.string('statusapproval_memo');
+      //   table.integer('statusapproval');
+      //   table.text('info');
+      //   table.string('modifiedby');
+      //   table.integer('jenjangapproval');
+      //   table.datetime('created_at');
+      //   table.datetime('updated_at');
+      //   table.integer('jatahcuti');
+      //   table.integer('sisacuti');
+      //   table.integer('prediksicuti');
+      // });
 
-        const tempApprovalCuti =
-          '##tempApprovalCuti' + Math.random().toString(36).substring(2, 8);
-        await trx.schema.createTable(tempApprovalCuti, (t) => {
-          t.integer('id');
-          t.integer('cuti_id');
-          t.integer('karyawan_id');
-          t.integer('jenjangapproval');
-          t.integer('statusapproval');
-          t.string('statusapproval_text');
-          t.string('statusapproval_memo');
-        });
-        await trx(tempApprovalCuti).insert(
-          trx
-            .select(
-              'ca.id',
-              'ca.cuti_id',
-              'ca.karyawan_id',
-              'ca.jenjangapproval',
-              'ca.statusapproval',
-              'p.text as statusapproval_text',
-              'p.memo as statusapproval_memo',
-            )
-            .from('cutiapproval as ca')
-            .leftJoin('parameter as p', 'p.id', 'ca.statusapproval')
-            .where('ca.karyawan_id', '=', karyawan_id),
-        );
-
-        // Langkah 1: Ambil cuti_id dari tabel cutiApproval berdasarkan karyawan_id
-        const cutiApprovalIds = await trx('cutiApproval')
-          .select('cuti_id')
-          .where('karyawan_id', '=', karyawan_id);
-
-        // Jika tidak ada cutiApproval yang ditemukan, kembalikan data kosong
-        if (cutiApprovalIds.length === 0) {
-          return {
-            data: [],
-            total: 0,
-            pagination: {
-              currentPage: 1,
-              totalPages: 1,
-              totalItems: 0,
-              itemsPerPage: 0,
-            },
-          };
-        }
-
-        const karyawanIdCutiPromises = cutiApprovalIds.map(async (cuti) => {
-          const karyawanData = await trx('cuti')
-            .select('karyawan_id')
-            .where('id', cuti.cuti_id)
-            .first();
-          return karyawanData; // Mengembalikan data karyawan_id
-        });
-
-        // Tunggu hingga semua query selesai
-        const karyawanIdCuti = await Promise.all(karyawanIdCutiPromises);
-        const filteredKaryawanIdCuti = [
-          ...new Map(
-            karyawanIdCuti
-              .filter((item) => item !== undefined)
-              .map((item) => [item.karyawan_id, item]),
-          ).values(),
-        ];
-        const karyawanIds = filteredKaryawanIdCuti.map(
-          (item) => item.karyawan_id,
-        );
-        // Panggil rekapCuti dengan karyawan_id yang sudah difilter
-        const datatempJatahCutiHasil2 =
-          await this.karyawanService.rekapCutiAllKaryawan(
-            karyawanIds, // Gabungkan karyawan_id menjadi string dengan koma sebagai pemisah
-            0,
-            0,
-            0,
-            trx,
-          );
-        // Langkah 2: Ambil data cuti berdasarkan cuti_id yang ada di cutiApproval
-        const data = await trx('cuti as c')
-          .select([
-            'c.id as id',
-            'c.tglpengajuan',
-            'c.karyawan_id',
-            'k.namakaryawan as namakaryawan',
-            'k.foto as fotokaryawan',
-            'k.namaalias as namaalias',
-            'c.tglcuti',
-            'c.statuscuti',
-            'p.memo as statuscuti_memo',
-            'p.text as statuscuti_text',
-            'c.statuscutibatal',
-            'b.memo as statuscutibatal_memo',
-            'c.nohp',
-            'c.alasanpenolakan',
-            'c.alasancuti',
-            'c.jumlahcuti',
-            'c.kategoricuti_id',
-            'cat.memo as kategoricuti_memo',
-            'c.statusnonhitung',
-            trx.raw(
-              "(CASE WHEN ISNULL(c.statusnonhitung, 0) IN (147,148) THEN sh.text ELSE '' END) as statusnonhitung_nama",
-            ),
-            'c.lampiran',
-            'c.statusapprovalatasan',
-            'c.tglapprovalatasan',
-            'c.userapprovalatasan',
-            'c.statusapprovalhrd',
-            'c.tglapprovalhrd',
-            'c.userapprovalhrd',
-            'ca.statusapproval_text as statusapproval_text',
-            'ca.statusapproval_memo as statusapproval_memo',
-            'ca.statusapproval as statusapproval',
-            'c.info',
-            'c.modifiedby',
+      const tempApprovalCuti =
+        '##tempApprovalCuti' + Math.random().toString(36).substring(2, 8);
+      await trx.schema.createTable(tempApprovalCuti, (t) => {
+        t.integer('id');
+        t.integer('cuti_id');
+        t.integer('karyawan_id');
+        t.integer('jenjangapproval');
+        t.integer('statusapproval');
+        t.string('statusapproval_text');
+        t.string('statusapproval_memo');
+      });
+      await trx(tempApprovalCuti).insert(
+        trx
+          .select(
+            'ca.id',
+            'ca.cuti_id',
+            'ca.karyawan_id',
             'ca.jenjangapproval',
-            'c.created_at',
-            'c.updated_at',
-            trx.raw(`
-              ISNULL(tc.jatahcuti, 0) AS jatahcuti
-            `),
-            trx.raw(`
-              ISNULL(tc.sisacuti, 0) AS sisacuti
-            `),
-            trx.raw(`
-              ISNULL(tc.prediksicuti, 0) AS prediksicuti
-            `),
-          ])
-          .leftJoin('karyawan as k', 'c.karyawan_id', 'k.id')
-          .leftJoin('parameter as p', 'c.statuscuti', 'p.id')
-          .leftJoin('parameter as b', 'c.statuscutibatal', 'b.id')
-          .leftJoin('parameter as cat', 'c.kategoricuti_id', 'cat.id')
-          .leftJoin('parameter as sh', 'c.statusnonhitung', 'sh.id')
-          .leftJoin(`${tempApprovalCuti} as ca`, 'c.id', 'ca.cuti_id')
-          .leftJoin(`${datatempJatahCutiHasil2} as tc`, 'c.id', 'tc.cuti_id')
-          .whereIn(
-            'c.id',
-            cutiApprovalIds.map((approval: any) => approval.cuti_id),
-          ); // Filter berdasarkan cuti_id dari cutiApproval
+            'ca.statusapproval',
+            'p.text as statusapproval_text',
+            'p.memo as statusapproval_memo',
+          )
+          .from('cutiapproval as ca')
+          .leftJoin('parameter as p', 'p.id', 'ca.statusapproval')
+          .where('ca.karyawan_id', '=', karyawan_id),
+      );
 
-        for (const item of data) {
-          await trx(tempTableName).insert(item);
-        }
-      }
+      // Langkah 1: Ambil cuti_id dari tabel cutiApproval berdasarkan karyawan_id
+      const cutiApprovalIds = await trx('cutiApproval')
+        .select('cuti_id')
+        .where('karyawan_id', '=', karyawan_id);
+
+      // Jika tidak ada cutiApproval yang ditemukan, kembalikan data kosong
+      // if (cutiApprovalIds.length === 0) {
+      //   return {
+      //     data: [],
+      //     total: 0,
+      //     pagination: {
+      //       currentPage: 1,
+      //       totalPages: 1,
+      //       totalItems: 0,
+      //       itemsPerPage: 0,
+      //     },
+      //   };
+      // }
+
+      // const karyawanIdCutiPromises = cutiApprovalIds.map(async (cuti) => {
+      //   const karyawanData = await trx('cuti')
+      //     .select('karyawan_id')
+      //     .where('id', cuti.cuti_id)
+      //     .first();
+      //   return karyawanData; // Mengembalikan data karyawan_id
+      // });
+
+      // // Tunggu hingga semua query selesai
+      // const karyawanIdCuti = await Promise.all(karyawanIdCutiPromises);
+      // const filteredKaryawanIdCuti = [
+      //   ...new Map(
+      //     karyawanIdCuti
+      //       .filter((item) => item !== undefined)
+      //       .map((item) => [item.karyawan_id, item]),
+      //   ).values(),
+      // ];
+      // const karyawanIds = filteredKaryawanIdCuti.map(
+      //   (item) => item.karyawan_id,
+      // );
+      // // Panggil rekapCuti dengan karyawan_id yang sudah difilter
+      // const datatempJatahCutiHasil2 =
+      //   await this.karyawanService.rekapCutiAllKaryawan(
+      //     karyawanIds, // Gabungkan karyawan_id menjadi string dengan koma sebagai pemisah
+      //     0,
+      //     0,
+      //     0,
+      //     trx,
+      //   );
+      // Langkah 2: Ambil data cuti berdasarkan cuti_id yang ada di cutiApproval
+      const query = trx('cuti as c')
+        .select([
+          'c.id as id',
+          'c.tglpengajuan',
+          'c.karyawan_id',
+          'k.namakaryawan as namakaryawan',
+          'k.foto as fotokaryawan',
+          'k.namaalias as namaalias',
+          'c.tglcuti',
+          'c.statuscuti',
+          'p.memo as statuscuti_memo',
+          'p.text as statuscuti_text',
+          'c.statuscutibatal',
+          'b.memo as statuscutibatal_memo',
+          'c.nohp',
+          'c.alasanpenolakan',
+          'c.alasancuti',
+          'c.jumlahcuti',
+          'c.kategoricuti_id',
+          'cat.memo as kategoricuti_memo',
+          'c.statusnonhitung',
+          trx.raw(
+            "(CASE WHEN ISNULL(c.statusnonhitung, 0) IN (147,148) THEN sh.text ELSE '' END) as statusnonhitung_nama",
+          ),
+          'c.lampiran',
+          'c.statusapprovalatasan',
+          'c.tglapprovalatasan',
+          'c.userapprovalatasan',
+          'c.statusapprovalhrd',
+          'c.tglapprovalhrd',
+          'c.userapprovalhrd',
+          'ca.statusapproval_text as statusapproval_text',
+          'ca.statusapproval_memo as statusapproval_memo',
+          'ca.statusapproval as statusapproval',
+          'c.info',
+          'c.modifiedby',
+          'ca.jenjangapproval',
+          'c.created_at',
+          'c.updated_at',
+          trx.raw('COUNT(*) OVER() AS __total_items'),
+          // <-- Tambah di sini:
+
+          // kalau perlu, uncomment nanti:
+          // trx.raw(`ISNULL(tc.jatahcuti, 0) AS jatahcuti`),
+          // trx.raw(`ISNULL(tc.sisacuti, 0) AS sisacuti`),
+          // trx.raw(`ISNULL(tc.prediksicuti, 0) AS prediksicuti`),
+        ])
+        .leftJoin('karyawan as k', 'c.karyawan_id', 'k.id')
+        .leftJoin('parameter as p', 'c.statuscuti', 'p.id')
+        .leftJoin('parameter as b', 'c.statuscutibatal', 'b.id')
+        .leftJoin('parameter as cat', 'c.kategoricuti_id', 'cat.id')
+        .leftJoin('parameter as sh', 'c.statusnonhitung', 'sh.id')
+        .leftJoin(`${tempApprovalCuti} as ca`, 'c.id', 'ca.cuti_id')
+        // .leftJoin(`${datatempJatahCutiHasil2} as tc`, 'c.id', 'tc.cuti_id')
+        .whereIn(
+          'c.id',
+          cutiApprovalIds.map((approval: any) => approval.cuti_id),
+        );
+
+      // for (const item of data) {
+      //   await trx(tempTableName).insert(item);
+      // }
+      // }
       let { page, limit } = pagination;
       page = page ?? 1;
       limit = limit ?? 0;
       const offset = (page - 1) * limit;
 
-      const query = trx(`${tempTableName} as a`).select(
-        'a.id',
-        'a.karyawan_id',
-        'a.namakaryawan as namakaryawan',
-        'a.namaalias as namaalias',
-        'a.tglcuti',
-        'a.fotokaryawan',
-        'a.statuscuti',
-        'a.statuscuti_memo',
-        'a.statuscuti_text',
-        'a.statuscutibatal',
-        'a.statuscutibatal_memo',
-        'a.nohp',
-        'a.alasanpenolakan',
-        'a.alasancuti',
-        'a.jumlahcuti',
-        'a.kategoricuti_id',
-        'a.kategoricuti_memo',
-        'a.statusnonhitung',
-        trx.raw("FORMAT(a.tglpengajuan, 'dd-MM-yyyy') as tglpengajuan"),
-        'a.lampiran',
-        'a.statusapprovalatasan',
-        'a.tglapprovalatasan',
-        'a.userapprovalatasan',
-        'a.statusapprovalhrd',
-        'a.tglapprovalhrd',
-        'a.userapprovalhrd',
-        'a.info',
-        'a.modifiedby',
-        'a.jenjangapproval',
-        trx.raw("FORMAT(a.created_at, 'dd-MM-yyyy HH:mm:ss') as updated_at"),
-        trx.raw("FORMAT(a.updated_at, 'dd-MM-yyyy HH:mm:ss') as updated_at"),
-        'a.jatahcuti',
-        'a.sisacuti',
-        'a.prediksicuti',
-        'a.statusapproval',
-        'a.statusapproval_text',
-        'a.statusapproval_memo',
-        trx.raw('COUNT(*) OVER() AS __total_items'),
-        trx.raw(`
-          (SELECT cd.id, cd.tglcuti, cd.periodecutidari, cd.periodecutisampai, cd.info, cd.modifiedby, 
-            FORMAT(cd.created_at, 'dd-MM-yyyy HH:mm:ss') as created_at, FORMAT(cd.updated_at, 'dd-MM-yyyy HH:mm:ss') as updated_at
-          FROM cutidetail as cd 
-          WHERE cd.cuti_id = a.id
-          FOR JSON PATH) as detail
-        `),
-      );
+      // const query = trx(`${tempTableName} as a`).select(
+      //   'a.id',
+      //   'a.karyawan_id',
+      //   'a.namakaryawan as namakaryawan',
+      //   'a.namaalias as namaalias',
+      //   'a.tglcuti',
+      //   'a.fotokaryawan',
+      //   'a.statuscuti',
+      //   'a.statuscuti_memo',
+      //   'a.statuscuti_text',
+      //   'a.statuscutibatal',
+      //   'a.statuscutibatal_memo',
+      //   'a.nohp',
+      //   'a.alasanpenolakan',
+      //   'a.alasancuti',
+      //   'a.jumlahcuti',
+      //   'a.kategoricuti_id',
+      //   'a.kategoricuti_memo',
+      //   'a.statusnonhitung',
+      //   trx.raw("FORMAT(a.tglpengajuan, 'dd-MM-yyyy') as tglpengajuan"),
+      //   'a.lampiran',
+      //   'a.statusapprovalatasan',
+      //   'a.tglapprovalatasan',
+      //   'a.userapprovalatasan',
+      //   'a.statusapprovalhrd',
+      //   'a.tglapprovalhrd',
+      //   'a.userapprovalhrd',
+      //   'a.info',
+      //   'a.modifiedby',
+      //   'a.jenjangapproval',
+      //   trx.raw("FORMAT(a.created_at, 'dd-MM-yyyy HH:mm:ss') as updated_at"),
+      //   trx.raw("FORMAT(a.updated_at, 'dd-MM-yyyy HH:mm:ss') as updated_at"),
+      //   'a.jatahcuti',
+      //   'a.sisacuti',
+      //   'a.prediksicuti',
+      //   'a.statusapproval',
+      //   'a.statusapproval_text',
+      //   'a.statusapproval_memo',
+      //   trx.raw('COUNT(*) OVER() AS __total_items'),
+      //   trx.raw(`
+      //     (SELECT cd.id, cd.tglcuti, cd.periodecutidari, cd.periodecutisampai, cd.info, cd.modifiedby,
+      //       FORMAT(cd.created_at, 'dd-MM-yyyy HH:mm:ss') as created_at, FORMAT(cd.updated_at, 'dd-MM-yyyy HH:mm:ss') as updated_at
+      //     FROM cutidetail as cd
+      //     WHERE cd.cuti_id = a.id
+      //     FOR JSON PATH) as detail
+      //   `),
+      // );
 
       // Pagination
       if (limit > 0) {
@@ -1016,10 +1027,10 @@ export class CutiService {
       if (search) {
         query.where((builder) => {
           builder
-            .orWhere('a.tglcuti', 'like', `%${search}%`)
-            .orWhere('a.alasancuti', 'like', `%${search}%`)
-            .orWhere('a.namakaryawan', 'like', `%${search}%`)
-            .orWhere('a.namaalias', 'like', `%${search}%`);
+            .orWhere('c.tglcuti', 'like', `%${search}%`)
+            .orWhere('c.alasancuti', 'like', `%${search}%`)
+            .orWhere('c.namakaryawan', 'like', `%${search}%`)
+            .orWhere('c.namaalias', 'like', `%${search}%`);
         });
       }
 
@@ -1028,25 +1039,27 @@ export class CutiService {
         for (const [key, value] of Object.entries(filters)) {
           if (key !== 'karyawan_id' && key !== 'isproses' && value) {
             if (key === 'created_at' || key === 'updated_at') {
-              query.andWhereRaw("FORMAT(a.??, 'dd-MM-yyyy HH:mm:ss') LIKE ?", [
+              query.andWhereRaw("FORMAT(c.??, 'dd-MM-yyyy HH:mm:ss') LIKE ?", [
                 key,
                 `%${value}%`,
               ]);
             } else if (key === 'memo') {
-              query.andWhere(`a.${key}`, '=', value);
+              query.andWhere(`k.${key}`, '=', value);
+            } else if (key === 'statusapproval') {
+              query.andWhere(`ca.${key}`, '=', value);
             } else if (key === 'namakaryawan') {
               // Gunakan alias 'karyawan_nama' yang sudah didefinisikan dalam SELECT
-              query.andWhere('a.namakaryawan', 'like', `%${value}%`);
+              query.andWhere('k.namakaryawan', 'like', `%${value}%`);
             } else if (key === 'namaalias') {
               // Gunakan alias 'namaalias' yang sudah didefinisikan dalam SELECT
-              query.andWhere('a.namaalias', 'like', `%${value}%`);
+              query.andWhere('k.namaalias', 'like', `%${value}%`);
             } else if (key === 'tglpengajuan') {
               // Filter untuk tglpengajuan dengan format 'dd-MM-yyyy'
-              query.andWhereRaw("FORMAT(a.tglpengajuan, 'dd-MM-yyyy') LIKE ?", [
+              query.andWhereRaw("FORMAT(c.tglpengajuan, 'dd-MM-yyyy') LIKE ?", [
                 `%${value}%`,
               ]);
             } else {
-              query.andWhere(`a.${key}`, 'like', `%${value}%`);
+              query.andWhere(`c.${key}`, 'like', `%${value}%`);
             }
           }
         }
@@ -1055,7 +1068,7 @@ export class CutiService {
       // Sorting
       if (sort?.sortBy && sort?.sortDirection) {
         if (sort.sortBy === 'tglpengajuan') {
-          query.orderBy('a.tglpengajuan', sort.sortDirection);
+          query.orderBy('c.tglpengajuan', sort.sortDirection);
         } else {
           query.orderBy(sort.sortBy, sort.sortDirection);
         }
@@ -1084,6 +1097,284 @@ export class CutiService {
       throw new Error(error);
     }
   }
+  // async findCutiApproval(
+  //   { search, filters, pagination, sort }: FindAllParams,
+  //   isproses: any,
+  //   trx: any,
+  // ) {
+  //   try {
+  //     const { karyawan_id } = filters ?? {}; // Mengambil karyawan_id dari filters
+  //     if (!karyawan_id) {
+  //       throw new Error('karyawan_id is required');
+  //     }
+
+  //     // await trx.schema.dropTableIfExists(tempTableName);
+  //     // await trx.schema.createTable(tempTableName, (table) => {
+  //     //   table.integer('id'); // Auto-increment primary key
+  //     //   table.integer('karyawan_id').notNullable();
+  //     //   table.text('namakaryawan');
+  //     //   table.string('fotokaryawan');
+  //     //   table.string('namaalias');
+  //     //   table.text('tglcuti');
+  //     //   table.datetime('tglpengajuan');
+  //     //   table.string('statuscuti');
+  //     //   table.string('statuscuti_memo');
+  //     //   table.string('statuscuti_text');
+  //     //   table.integer('statuscutibatal');
+  //     //   table.string('statuscutibatal_memo');
+  //     //   table.string('nohp');
+  //     //   table.text('alasanpenolakan');
+  //     //   table.text('alasancuti');
+  //     //   table.integer('jumlahcuti');
+  //     //   table.integer('kategoricuti_id');
+  //     //   table.string('kategoricuti_memo');
+  //     //   table.string('statusnonhitung');
+  //     //   table.string('statusnonhitung_nama');
+  //     //   table.text('lampiran');
+  //     //   table.string('statusapprovalatasan');
+  //     //   table.string('tglapprovalatasan');
+  //     //   table.string('userapprovalatasan');
+  //     //   table.string('statusapprovalhrd');
+  //     //   table.string('tglapprovalhrd');
+  //     //   table.string('userapprovalhrd');
+  //     //   table.string('statusapproval_text');
+  //     //   table.string('statusapproval_memo');
+  //     //   table.integer('statusapproval');
+  //     //   table.text('info');
+  //     //   table.string('modifiedby');
+  //     //   table.integer('jenjangapproval');
+  //     //   table.datetime('created_at');
+  //     //   table.datetime('updated_at');
+  //     //   table.integer('jatahcuti');
+  //     //   table.integer('sisacuti');
+  //     //   table.integer('prediksicuti');
+  //     // });
+
+  //     const tempApprovalCuti =
+  //       '##tempApprovalCuti' + Math.random().toString(36).substring(2, 8);
+  //     await trx.schema.createTable(tempApprovalCuti, (t) => {
+  //       t.integer('id');
+  //       t.integer('cuti_id');
+  //       t.integer('karyawan_id');
+  //       t.integer('jenjangapproval');
+  //       t.integer('statusapproval');
+  //       t.string('statusapproval_text');
+  //       t.string('statusapproval_memo');
+  //     });
+  //     await trx(tempApprovalCuti).insert(
+  //       trx
+  //         .select(
+  //           'ca.id',
+  //           'ca.cuti_id',
+  //           'ca.karyawan_id',
+  //           'ca.jenjangapproval',
+  //           'ca.statusapproval',
+  //           'p.text as statusapproval_text',
+  //           'p.memo as statusapproval_memo',
+  //         )
+  //         .from('cutiapproval as ca')
+  //         .leftJoin('parameter as p', 'p.id', 'ca.statusapproval')
+  //         .where('ca.karyawan_id', '=', karyawan_id),
+  //     );
+
+  //     // Langkah 1: Ambil cuti_id dari tabel cutiApproval berdasarkan karyawan_id
+  //     const cutiApprovalIds = await trx('cutiApproval')
+  //       .select('cuti_id')
+  //       .where('karyawan_id', '=', karyawan_id);
+  //     // Langkah 2: Ambil data cuti berdasarkan cuti_id yang ada di cutiApproval
+  //     const query = trx('cuti as c')
+  //       .select([
+  //         'c.id as id',
+  //         'c.tglpengajuan',
+  //         'c.karyawan_id',
+  //         'k.namakaryawan as namakaryawan',
+  //         'k.foto as fotokaryawan',
+  //         'k.namaalias as namaalias',
+  //         'c.tglcuti',
+  //         'c.statuscuti',
+  //         'p.memo as statuscuti_memo',
+  //         'p.text as statuscuti_text',
+  //         'c.statuscutibatal',
+  //         'b.memo as statuscutibatal_memo',
+  //         'c.nohp',
+  //         'c.alasanpenolakan',
+  //         'c.alasancuti',
+  //         'c.jumlahcuti',
+  //         'c.kategoricuti_id',
+  //         'cat.memo as kategoricuti_memo',
+  //         'c.statusnonhitung',
+  //         trx.raw(
+  //           "(CASE WHEN ISNULL(c.statusnonhitung, 0) IN (147,148) THEN sh.text ELSE '' END) as statusnonhitung_nama",
+  //         ),
+  //         'c.lampiran',
+  //         'c.statusapprovalatasan',
+  //         'c.tglapprovalatasan',
+  //         'c.userapprovalatasan',
+  //         'c.statusapprovalhrd',
+  //         'c.tglapprovalhrd',
+  //         'c.userapprovalhrd',
+  //         'ca.statusapproval_text as statusapproval_text',
+  //         'ca.statusapproval_memo as statusapproval_memo',
+  //         'ca.statusapproval as statusapproval',
+  //         'c.info',
+  //         'c.modifiedby',
+  //         'ca.jenjangapproval',
+  //         'c.created_at',
+  //         'c.updated_at',
+  //         // trx.raw(`
+  //         //     ISNULL(tc.jatahcuti, 0) AS jatahcuti
+  //         //   `),
+  //         // trx.raw(`
+  //         //     ISNULL(tc.sisacuti, 0) AS sisacuti
+  //         //   `),
+  //         // trx.raw(`
+  //         //     ISNULL(tc.prediksicuti, 0) AS prediksicuti
+  //         //   `),
+  //       ])
+  //       .leftJoin('karyawan as k', 'c.karyawan_id', 'k.id')
+  //       .leftJoin('parameter as p', 'c.statuscuti', 'p.id')
+  //       .leftJoin('parameter as b', 'c.statuscutibatal', 'b.id')
+  //       .leftJoin('parameter as cat', 'c.kategoricuti_id', 'cat.id')
+  //       .leftJoin('parameter as sh', 'c.statusnonhitung', 'sh.id')
+  //       .leftJoin(`${tempApprovalCuti} as ca`, 'c.id', 'ca.cuti_id')
+  //       // .leftJoin(`${datatempJatahCutiHasil2} as tc`, 'c.id', 'tc.cuti_id')
+  //       .whereIn(
+  //         'c.id',
+  //         cutiApprovalIds.map((approval: any) => approval.cuti_id),
+  //       ); // Filter berdasarkan cuti_id dari cutiApproval
+
+  //     let { page, limit } = pagination;
+  //     page = page ?? 1;
+  //     limit = limit ?? 0;
+  //     const offset = (page - 1) * limit;
+
+  //     // const query = trx(`${tempTableName} as a`).select(
+  //     //   'a.id',
+  //     //   'a.karyawan_id',
+  //     //   'a.namakaryawan as namakaryawan',
+  //     //   'a.namaalias as namaalias',
+  //     //   'a.tglcuti',
+  //     //   'a.fotokaryawan',
+  //     //   'a.statuscuti',
+  //     //   'a.statuscuti_memo',
+  //     //   'a.statuscuti_text',
+  //     //   'a.statuscutibatal',
+  //     //   'a.statuscutibatal_memo',
+  //     //   'a.nohp',
+  //     //   'a.alasanpenolakan',
+  //     //   'a.alasancuti',
+  //     //   'a.jumlahcuti',
+  //     //   'a.kategoricuti_id',
+  //     //   'a.kategoricuti_memo',
+  //     //   'a.statusnonhitung',
+  //     //   trx.raw("FORMAT(a.tglpengajuan, 'dd-MM-yyyy') as tglpengajuan"),
+  //     //   'a.lampiran',
+  //     //   'a.statusapprovalatasan',
+  //     //   'a.tglapprovalatasan',
+  //     //   'a.userapprovalatasan',
+  //     //   'a.statusapprovalhrd',
+  //     //   'a.tglapprovalhrd',
+  //     //   'a.userapprovalhrd',
+  //     //   'a.info',
+  //     //   'a.modifiedby',
+  //     //   'a.jenjangapproval',
+  //     //   trx.raw("FORMAT(a.created_at, 'dd-MM-yyyy HH:mm:ss') as updated_at"),
+  //     //   trx.raw("FORMAT(a.updated_at, 'dd-MM-yyyy HH:mm:ss') as updated_at"),
+  //     //   'a.jatahcuti',
+  //     //   'a.sisacuti',
+  //     //   'a.prediksicuti',
+  //     //   'a.statusapproval',
+  //     //   'a.statusapproval_text',
+  //     //   'a.statusapproval_memo',
+  //     //   trx.raw('COUNT(*) OVER() AS __total_items'),
+  //     //   trx.raw(`
+  //     //     (SELECT cd.id, cd.tglcuti, cd.periodecutidari, cd.periodecutisampai, cd.info, cd.modifiedby,
+  //     //       FORMAT(cd.created_at, 'dd-MM-yyyy HH:mm:ss') as created_at, FORMAT(cd.updated_at, 'dd-MM-yyyy HH:mm:ss') as updated_at
+  //     //     FROM cutidetail as cd
+  //     //     WHERE cd.cuti_id = a.id
+  //     //     FOR JSON PATH) as detail
+  //     //   `),
+  //     // );
+
+  //     // Pagination
+  //     if (limit > 0) {
+  //       query.limit(limit).offset(offset);
+  //     }
+
+  //     // Search
+  //     if (search) {
+  //       query.where((builder) => {
+  //         builder
+  //           .orWhere('c.tglcuti', 'like', `%${search}%`)
+  //           .orWhere('c.alasancuti', 'like', `%${search}%`)
+  //           .orWhere('c.namakaryawan', 'like', `%${search}%`)
+  //           .orWhere('c.namaalias', 'like', `%${search}%`);
+  //       });
+  //     }
+
+  //     // Filters lainnya
+  //     if (filters) {
+  //       for (const [key, value] of Object.entries(filters)) {
+  //         if (key !== 'karyawan_id' && key !== 'isproses' && value) {
+  //           if (key === 'created_at' || key === 'updated_at') {
+  //             query.andWhereRaw("FORMAT(c.??, 'dd-MM-yyyy HH:mm:ss') LIKE ?", [
+  //               key,
+  //               `%${value}%`,
+  //             ]);
+  //           } else if (key === 'memo') {
+  //             query.andWhere(`k.${key}`, '=', value);
+  //           } else if (key === 'statusapproval') {
+  //             query.andWhere(`ca.${key}`, '=', value);
+  //           } else if (key === 'namakaryawan') {
+  //             // Gunakan alias 'karyawan_nama' yang sudah didefinisikan dalam SELECT
+  //             query.andWhere('k.namakaryawan', 'like', `%${value}%`);
+  //           } else if (key === 'namaalias') {
+  //             // Gunakan alias 'namaalias' yang sudah didefinisikan dalam SELECT
+  //             query.andWhere('k.namaalias', 'like', `%${value}%`);
+  //           } else if (key === 'tglpengajuan') {
+  //             // Filter untuk tglpengajuan dengan format 'dd-MM-yyyy'
+  //             query.andWhereRaw("FORMAT(c.tglpengajuan, 'dd-MM-yyyy') LIKE ?", [
+  //               `%${value}%`,
+  //             ]);
+  //           } else {
+  //             query.andWhere(`c.${key}`, 'like', `%${value}%`);
+  //           }
+  //         }
+  //       }
+  //     }
+
+  //     // Sorting
+  //     if (sort?.sortBy && sort?.sortDirection) {
+  //       if (sort.sortBy === 'tglpengajuan') {
+  //         query.orderBy('c.tglpengajuan', sort.sortDirection);
+  //       } else {
+  //         query.orderBy(sort.sortBy, sort.sortDirection);
+  //       }
+  //     }
+  //     const data = await query;
+
+  //     const total = data.length ? Number(data[0].__total_items) : 0;
+  //     const totalPages = limit > 0 ? Math.ceil(total / limit) : 1;
+  //     const itemsPerPage = limit > 0 ? limit : total;
+  //     const parsedData = data.map((item: any) => {
+  //       item.detail = item.detail ? JSON.parse(item.detail) : [];
+  //       return item;
+  //     });
+  //     return {
+  //       data: parsedData,
+  //       total: total, // Total item dihitung dari window function
+  //       pagination: {
+  //         currentPage: Number(page),
+  //         totalPages,
+  //         totalItems: total,
+  //         itemsPerPage,
+  //       },
+  //     };
+  //   } catch (error) {
+  //     console.error('Error fetching cuti approval data:', error);
+  //     throw new Error(error);
+  //   }
+  // }
 
   async rekapCutiData(
     idcabang: number,

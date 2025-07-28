@@ -262,7 +262,6 @@ export class KaryawanController {
     return this.karyawanService.findAll(params);
   }
   @Get()
-  //@KARYAWAN
   @UseGuards(AuthGuard)
   @UsePipes(new ZodValidationPipe(FindAllSchema))
   async findAllCabang(@Req() req, @Query() query: FindAllDto) {
@@ -275,27 +274,24 @@ export class KaryawanController {
       isLookUp,
       ...filters
     }: { [key: string]: any } = query;
+
     const role_id = req.user.user.role_id;
     if (!role_id?.includes('1')) {
-      filters.cabang_id = req.user.cabang_id;
+      const userCabang = req.user.cabang_id;
+      // kalau user di cabang 29, izinkan juga lihat cabang 30
+      filters.cabang_id = userCabang === 29 ? [29, 1135] : userCabang;
     }
 
-    const sortParams = {
-      sortBy: sortBy || 'namakaryawan',
-      sortDirection: sortDirection || 'asc',
-    };
-
-    const pagination = {
-      page: page || 1,
-      limit: limit,
-    };
-
+    // ... rest tetap sama ...
     const params: FindAllParams = {
       search,
       filters,
-      pagination,
+      pagination: { page: page || 1, limit },
       isLookUp: isLookUp === 'true',
-      sort: sortParams as { sortBy: string; sortDirection: 'asc' | 'desc' },
+      sort: {
+        sortBy: sortBy || 'namakaryawan',
+        sortDirection: sortDirection || 'asc',
+      },
     };
 
     return this.karyawanService.findAllCabang(params);

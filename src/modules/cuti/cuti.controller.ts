@@ -110,6 +110,37 @@ export class CutiController {
       );
     }
   }
+
+  @Post('saldo-approvalcuti')
+  //@REKAP-CUTI-KARYAWAN
+  async SaldoApprovalCuti(
+    @Body()
+    data: any,
+  ) {
+    // Mulai transaksi
+    const trx = await dbMssql.transaction();
+    console.log('data', data);
+    try {
+      // Memanggil service dengan parameter tanggal dari dan tanggal sampai yang sudah diformat
+      const result = await this.cutiService.getCutiSaldoKaryawan(
+        data.karyawan_id,
+        data.cuti_id,
+        trx, // Menggunakan transaksi dalam service
+      );
+
+      // Commit transaksi jika tidak ada error
+      await trx.commit();
+
+      return result;
+    } catch (error) {
+      // Rollback transaksi jika ada error
+      console.error(error);
+      await trx.rollback();
+      throw new InternalServerErrorException(
+        'Terjadi kesalahan saat memproses data',
+      );
+    }
+  }
   @Get('/export-rekap')
   @UseGuards(AuthGuard)
   async exportRekapCuti(@Req() req, @Res() res: Response) {
@@ -946,11 +977,7 @@ export class CutiController {
         isLookUp: isLookUp === 'true',
         sort: sortParams as { sortBy: string; sortDirection: 'asc' | 'desc' },
       };
-      const response = await this.cutiService.findCutiApproval(
-        params,
-        filters.isproses,
-        trx,
-      );
+      const response = await this.cutiService.findCutiApproval(params, trx);
 
       await trx.commit();
       return response;

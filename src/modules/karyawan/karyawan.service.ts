@@ -2333,6 +2333,44 @@ export class KaryawanService {
           dbMssql.raw(
             "COALESCE(de.nama, 'Tidak ada email') as daftaremail_email",
           ),
+          dbMssql.raw(`
+            CASE
+              WHEN k.tglmasukkerja IS NOT NULL
+               AND k.tglmasukkerja <= GETDATE()
+              THEN
+                CONCAT(
+                  -- 1) Tahun penuh
+                  DATEDIFF(YEAR, k.tglmasukkerja, GETDATE())
+                    - CASE
+                        WHEN MONTH(GETDATE()) < MONTH(k.tglmasukkerja)
+                          OR (MONTH(GETDATE()) = MONTH(k.tglmasukkerja)
+                              AND DAY(GETDATE()) < DAY(k.tglmasukkerja))
+                        THEN 1 ELSE 0
+                      END,
+                  ' tahun, ',
+          
+                  -- 2) Bulan sisanya
+                  (
+                    (MONTH(GETDATE()) - MONTH(k.tglmasukkerja)
+                       - CASE WHEN DAY(GETDATE()) < DAY(k.tglmasukkerja) THEN 1 ELSE 0 END
+                    ) + 12
+                  ) % 12,
+                  ' bulan, ',
+          
+                  -- 3) Hari sisanya
+                  CASE
+                    WHEN DAY(GETDATE()) >= DAY(k.tglmasukkerja)
+                    THEN DAY(GETDATE()) - DAY(k.tglmasukkerja)
+                    ELSE
+                      DAY(GETDATE())
+                      + DAY(EOMONTH(DATEADD(MONTH, -1, GETDATE())))
+                      - DAY(k.tglmasukkerja)
+                  END,
+                  ' hari'
+                )
+              ELSE NULL
+            END AS lamabekerja
+          `),
         ])
         .leftJoin('parameter as p1', 'k.statusaktif', 'p1.id')
         .leftJoin('parameter as p2', 'k.statuskerja_id', 'p2.id')
@@ -2430,6 +2468,13 @@ export class KaryawanService {
                   "CONCAT(atasan.namakaryawan, ' (', atasan.id, ')') LIKE ?",
                   [`%${value}%`],
                 );
+              } else if (key === 'cabang_id') {
+                if (Array.isArray(value)) {
+                  query.whereIn('k.cabang_id', value);
+                } else {
+                  query.andWhere('k.cabang_id', value);
+                }
+                continue;
               } else {
                 query.andWhere(`k.${key}`, 'like', `%${value}%`);
               }
@@ -2439,7 +2484,19 @@ export class KaryawanService {
       }
 
       if (sort?.sortBy && sort?.sortDirection) {
-        query.orderBy(sort.sortBy, sort.sortDirection);
+        switch (sort.sortBy) {
+          case 'tglmasukkerja':
+            query.orderBy('k.tglmasukkerja', sort.sortDirection);
+            break;
+
+          case 'lamabekerja':
+            // urut berdasarkan alias string "X tahun, Y bulan, Z hari"
+            query.orderByRaw(`lamabekerja ${sort.sortDirection}`);
+            break;
+
+          default:
+            query.orderBy(sort.sortBy, sort.sortDirection);
+        }
       }
 
       const result = await dbMssql(this.tableName).count('id as total').first();

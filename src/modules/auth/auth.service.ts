@@ -42,6 +42,7 @@ export class AuthService {
         'statusaktif',
         'modifiedby',
         'karyawan_id',
+        'cabang_id',
         'created_at',
         'updated_at',
       )
@@ -74,7 +75,7 @@ export class AuthService {
     const payload = {
       sub: user.id,
       user: userWithoutPassword,
-      cabang_id: dataKaryawan.cabang_id,
+      cabang_id: user.cabang_id,
     };
 
     const accessTokenExpiresIn = 7200; // 15 seconds
@@ -89,7 +90,7 @@ export class AuthService {
     return {
       accessToken,
       refreshToken,
-      cabang_id: dataKaryawan.cabang_id,
+      cabang_id: user.cabang_id,
       users: userWithoutPassword,
       accessTokenExpiresIn,
       accessTokenExpires,

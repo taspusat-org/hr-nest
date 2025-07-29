@@ -70,25 +70,6 @@ export class CutiapprovalService {
       const dataTempTableName = await trx(tempTableName)
         .select('sisacuti', 'prediksicuti')
         .where('id', cutiId);
-      if (statusnonhitung == '147') {
-        await trx(tempTableName)
-          .update({
-            sisacuti: dataTempTableName.prediksicuti,
-            statusapproval: '151',
-            statusapproval_memo:
-              '{"MEMO":"AKTIF","SINGKATAN":"A","WARNA":"#009933","WARNATULISAN":"#FFFFFF"}',
-          })
-          .where('id', cutiId);
-      } else {
-        await trx(tempTableName)
-          .update({
-            prediksicuti: dataTempTableName.sisacuti,
-            statusapproval: '151',
-            statusapproval_memo:
-              '{"MEMO":"AKTIF","SINGKATAN":"A","WARNA":"#009933","WARNATULISAN":"#FFFFFF"}',
-          })
-          .where('id', cutiId);
-      }
       const dataParameter = await trx('parameter')
         .where('grp', 'STATUS APPROVAL')
         .andWhere('text', 'APPROVAL');

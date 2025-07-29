@@ -99,7 +99,6 @@ export class KaryawanService {
           dbMssql.raw(
             "FORMAT(k.updated_at, 'dd-MM-yyyy HH:mm:ss') AS updated_at",
           ),
-
           'p1.memo as statusaktif_memo',
           'p1.text as statusaktif_text',
           'p2.text as statuskerja_text',
@@ -107,7 +106,6 @@ export class KaryawanService {
           'p4.text as jeniskelamin_text',
           'p5.text as golongandarah_text',
           'p6.text as agama_text',
-
           'a.nama as approval_nama',
           'shift.nama as shift_nama',
           'c.nama as cabang_nama',
@@ -134,7 +132,6 @@ export class KaryawanService {
         .leftJoin('parameter as thr', 'k.thr_id', 'thr.id')
         .leftJoin('daftaremail as de', 'k.daftaremail_id', 'de.id')
         .leftJoin('logabsensi as la', 'k.absen_id', 'la.id')
-
         .whereNull('k.tglresign');
 
       query.limit(limit).offset(offset);
@@ -201,7 +198,18 @@ export class KaryawanService {
       }
 
       if (sort?.sortBy && sort?.sortDirection) {
-        query.orderBy(sort.sortBy, sort.sortDirection);
+        // Sorting based on the actual column (not the formatted string)
+        if (sort.sortBy === 'tglmasukkerja') {
+          query.orderBy('k.tglmasukkerja', sort.sortDirection);
+        } else if (sort.sortBy === 'tgllahir') {
+          query.orderBy('k.tgllahir', sort.sortDirection);
+        } else if (sort.sortBy === 'tglmutasi') {
+          query.orderBy('k.tglmutasi', sort.sortDirection);
+        } else if (sort.sortBy === 'tglresign') {
+          query.orderBy('k.tglresign', sort.sortDirection);
+        } else {
+          query.orderBy(sort.sortBy, sort.sortDirection);
+        }
       }
 
       const result = await dbMssql(this.tableName).count('id as total').first();
@@ -225,6 +233,7 @@ export class KaryawanService {
       throw new Error(error);
     }
   }
+
   async rekapCuti(id: string, isoverview: any, trx: any) {
     const tempCuti =
       '##temp_cuti_' + Math.random().toString(36).substring(2, 8);
@@ -556,7 +565,7 @@ export class KaryawanService {
 
         .from('kartucuti AS A')
         .leftOuterJoin('cuti as b', 'A.cuti_id', 'b.id')
-        .whereRaw('(ISNULL(A.masuk, 0) - ISNULL(A.keluar, 0)) <> 0')
+        // .whereRaw('(ISNULL(A.masuk, 0) - ISNULL(A.keluar, 0)) <> 0')
         .andWhereRaw('(ISNULL(b.statuscutibatal, 0)) <> 153')
         .andWhereRaw('(ISNULL(b.statuscuti, 0)) NOT IN (153,152)')
         .andWhere('A.karyawan_id', '=', trx.raw('?', id))
@@ -815,8 +824,8 @@ export class KaryawanService {
             'b.cuti_id',
           );
         })
-        .where('a.keluar', '<>', 0)
-        .andWhere(trx.raw("ISNULL(a.jenistransaksi, '') <> 'hangus cuti'"))
+        // .where('a.keluar', '<>', 0)
+        .where(trx.raw("ISNULL(a.jenistransaksi, '') <> 'hangus cuti'"))
         .andWhere(
           trx.raw("YEAR(ISNULL(b.periodecutidari, '1900-01-01')) <> 1900"),
         )
@@ -1461,7 +1470,7 @@ export class KaryawanService {
           .from('kartucuti AS A')
           .innerJoin(`${tempKaryawanId} AS C`, 'A.karyawan_id', 'C.karyawan_id')
           .leftOuterJoin('cuti as b', 'A.cuti_id', 'b.id')
-          .whereRaw('(ISNULL(A.masuk, 0) - ISNULL(A.keluar, 0)) <> 0')
+          // .whereRaw('(ISNULL(A.masuk, 0) - ISNULL(A.keluar, 0)) <> 0')
           .andWhere('A.tgltransaksi', '<', tglakhir)
           .andWhereRaw('(ISNULL(b.statuscutibatal, 0)) <> 153')
           .andWhereRaw('(ISNULL(b.statuscuti, 0)) NOT IN (153,152,150)')
@@ -1488,7 +1497,7 @@ export class KaryawanService {
           .from('kartucuti AS A')
           .innerJoin(`${tempKaryawanId} AS C`, 'A.karyawan_id', 'C.karyawan_id')
           .leftOuterJoin('cuti as b', 'A.cuti_id', 'b.id')
-          .whereRaw('(ISNULL(A.masuk, 0) - ISNULL(A.keluar, 0)) <> 0')
+          // .whereRaw('(ISNULL(A.masuk, 0) - ISNULL(A.keluar, 0)) <> 0')
           .andWhere('A.tgltransaksi', '<', tglakhir)
           .andWhereRaw('(ISNULL(b.statuscutibatal, 0)) <> 153')
           .andWhereRaw('(ISNULL(b.statuscuti, 0)) NOT IN (153,152)')
@@ -1828,8 +1837,8 @@ export class KaryawanService {
             'b.cuti_id',
           );
         })
-        .where('a.keluar', '<>', 0)
-        .andWhere(trx.raw("ISNULL(a.jenistransaksi, '') <> 'hangus cuti'"))
+        // .where('a.keluar', '<>', 0)
+        .where(trx.raw("ISNULL(a.jenistransaksi, '') <> 'hangus cuti'"))
         .andWhere(
           trx.raw("YEAR(ISNULL(b.periodecutidari, '1900-01-01')) <> 1900"),
         )
@@ -2324,6 +2333,44 @@ export class KaryawanService {
           dbMssql.raw(
             "COALESCE(de.nama, 'Tidak ada email') as daftaremail_email",
           ),
+          dbMssql.raw(`
+            CASE
+              WHEN k.tglmasukkerja IS NOT NULL
+               AND k.tglmasukkerja <= GETDATE()
+              THEN
+                CONCAT(
+                  -- 1) Tahun penuh
+                  DATEDIFF(YEAR, k.tglmasukkerja, GETDATE())
+                    - CASE
+                        WHEN MONTH(GETDATE()) < MONTH(k.tglmasukkerja)
+                          OR (MONTH(GETDATE()) = MONTH(k.tglmasukkerja)
+                              AND DAY(GETDATE()) < DAY(k.tglmasukkerja))
+                        THEN 1 ELSE 0
+                      END,
+                  ' tahun, ',
+          
+                  -- 2) Bulan sisanya
+                  (
+                    (MONTH(GETDATE()) - MONTH(k.tglmasukkerja)
+                       - CASE WHEN DAY(GETDATE()) < DAY(k.tglmasukkerja) THEN 1 ELSE 0 END
+                    ) + 12
+                  ) % 12,
+                  ' bulan, ',
+          
+                  -- 3) Hari sisanya
+                  CASE
+                    WHEN DAY(GETDATE()) >= DAY(k.tglmasukkerja)
+                    THEN DAY(GETDATE()) - DAY(k.tglmasukkerja)
+                    ELSE
+                      DAY(GETDATE())
+                      + DAY(EOMONTH(DATEADD(MONTH, -1, GETDATE())))
+                      - DAY(k.tglmasukkerja)
+                  END,
+                  ' hari'
+                )
+              ELSE NULL
+            END AS lamabekerja
+          `),
         ])
         .leftJoin('parameter as p1', 'k.statusaktif', 'p1.id')
         .leftJoin('parameter as p2', 'k.statuskerja_id', 'p2.id')
@@ -2421,6 +2468,13 @@ export class KaryawanService {
                   "CONCAT(atasan.namakaryawan, ' (', atasan.id, ')') LIKE ?",
                   [`%${value}%`],
                 );
+              } else if (key === 'cabang_id') {
+                if (Array.isArray(value)) {
+                  query.whereIn('k.cabang_id', value);
+                } else {
+                  query.andWhere('k.cabang_id', value);
+                }
+                continue;
               } else {
                 query.andWhere(`k.${key}`, 'like', `%${value}%`);
               }
@@ -2430,7 +2484,19 @@ export class KaryawanService {
       }
 
       if (sort?.sortBy && sort?.sortDirection) {
-        query.orderBy(sort.sortBy, sort.sortDirection);
+        switch (sort.sortBy) {
+          case 'tglmasukkerja':
+            query.orderBy('k.tglmasukkerja', sort.sortDirection);
+            break;
+
+          case 'lamabekerja':
+            // urut berdasarkan alias string "X tahun, Y bulan, Z hari"
+            query.orderByRaw(`lamabekerja ${sort.sortDirection}`);
+            break;
+
+          default:
+            query.orderBy(sort.sortBy, sort.sortDirection);
+        }
       }
 
       const result = await dbMssql(this.tableName).count('id as total').first();

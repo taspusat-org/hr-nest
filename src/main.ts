@@ -19,7 +19,12 @@ async function bootstrap() {
   }
 
   app.enableCors({
-    origin: ['http://localhost:3000', '*', 'http://192.168.3.211:3000'], // List of allowed origins
+    origin: [
+      'http://localhost:3000',
+      '*',
+      'http://192.168.3.211:3000',
+      'http://localhost:3001',
+    ], // List of allowed origins
     methods: ['GET', 'POST', 'PUT', 'DELETE'], // Allowed methods
     allowedHeaders: ['Content-Type', 'Authorization'], // Allowed headers
   });

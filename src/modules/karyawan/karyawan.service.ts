@@ -565,7 +565,7 @@ export class KaryawanService {
 
         .from('kartucuti AS A')
         .leftOuterJoin('cuti as b', 'A.cuti_id', 'b.id')
-        .whereRaw('(ISNULL(A.masuk, 0) - ISNULL(A.keluar, 0)) <> 0')
+        // .whereRaw('(ISNULL(A.masuk, 0) - ISNULL(A.keluar, 0)) <> 0')
         .andWhereRaw('(ISNULL(b.statuscutibatal, 0)) <> 153')
         .andWhereRaw('(ISNULL(b.statuscuti, 0)) NOT IN (153,152)')
         .andWhere('A.karyawan_id', '=', trx.raw('?', id))
@@ -824,8 +824,8 @@ export class KaryawanService {
             'b.cuti_id',
           );
         })
-        .where('a.keluar', '<>', 0)
-        .andWhere(trx.raw("ISNULL(a.jenistransaksi, '') <> 'hangus cuti'"))
+        // .where('a.keluar', '<>', 0)
+        .where(trx.raw("ISNULL(a.jenistransaksi, '') <> 'hangus cuti'"))
         .andWhere(
           trx.raw("YEAR(ISNULL(b.periodecutidari, '1900-01-01')) <> 1900"),
         )
@@ -1470,7 +1470,7 @@ export class KaryawanService {
           .from('kartucuti AS A')
           .innerJoin(`${tempKaryawanId} AS C`, 'A.karyawan_id', 'C.karyawan_id')
           .leftOuterJoin('cuti as b', 'A.cuti_id', 'b.id')
-          .whereRaw('(ISNULL(A.masuk, 0) - ISNULL(A.keluar, 0)) <> 0')
+          // .whereRaw('(ISNULL(A.masuk, 0) - ISNULL(A.keluar, 0)) <> 0')
           .andWhere('A.tgltransaksi', '<', tglakhir)
           .andWhereRaw('(ISNULL(b.statuscutibatal, 0)) <> 153')
           .andWhereRaw('(ISNULL(b.statuscuti, 0)) NOT IN (153,152,150)')
@@ -1497,7 +1497,7 @@ export class KaryawanService {
           .from('kartucuti AS A')
           .innerJoin(`${tempKaryawanId} AS C`, 'A.karyawan_id', 'C.karyawan_id')
           .leftOuterJoin('cuti as b', 'A.cuti_id', 'b.id')
-          .whereRaw('(ISNULL(A.masuk, 0) - ISNULL(A.keluar, 0)) <> 0')
+          // .whereRaw('(ISNULL(A.masuk, 0) - ISNULL(A.keluar, 0)) <> 0')
           .andWhere('A.tgltransaksi', '<', tglakhir)
           .andWhereRaw('(ISNULL(b.statuscutibatal, 0)) <> 153')
           .andWhereRaw('(ISNULL(b.statuscuti, 0)) NOT IN (153,152)')
@@ -1837,8 +1837,8 @@ export class KaryawanService {
             'b.cuti_id',
           );
         })
-        .where('a.keluar', '<>', 0)
-        .andWhere(trx.raw("ISNULL(a.jenistransaksi, '') <> 'hangus cuti'"))
+        // .where('a.keluar', '<>', 0)
+        .where(trx.raw("ISNULL(a.jenistransaksi, '') <> 'hangus cuti'"))
         .andWhere(
           trx.raw("YEAR(ISNULL(b.periodecutidari, '1900-01-01')) <> 1900"),
         )

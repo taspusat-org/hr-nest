@@ -905,7 +905,7 @@ export class CutiService {
       const query = trx('cuti as c')
         .select([
           'c.id as id',
-          'c.tglpengajuan',
+          trx.raw("FORMAT(c.tglpengajuan, 'dd-MM-yyyy') as tglpengajuan"),
           'c.karyawan_id',
           'k.namakaryawan as namakaryawan',
           'k.foto as fotokaryawan',

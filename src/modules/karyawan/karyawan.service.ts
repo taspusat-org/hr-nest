@@ -2104,10 +2104,22 @@ export class KaryawanService {
       );
 
       // console.log('masuk3', await trx(TempkartucutilaporanRekap));
-
-      const result = await trx(TempkartucutilaporanRekap)
-        .select('*')
-        .orderBy('id');
+      const result = await trx(`${TempkartucutilaporanRekap} as A`)
+        .select(
+          'A.id',
+          'A.karyawan_id',
+          'B.namakaryawan',
+          'A.periodedari',
+          'A.periodesampai',
+          'A.jenistransaksi',
+          'A.tglbukti',
+          'A.masuk',
+          'A.keluar',
+          'A.saldo',
+        )
+        .innerJoin('karyawan as B', 'A.karyawan_id', 'B.id')
+        .orderBy('b.id')
+        .orderBy('A.id');
       return result;
     } else {
       if (isproses == 0) {
@@ -2253,7 +2265,10 @@ export class KaryawanService {
       }
     }
   }
-  async findAllCabang({ search, filters, pagination, sort }: FindAllParams) {
+  async findAllCabang(
+    { search, filters, pagination, sort }: FindAllParams,
+    id: any,
+  ) {
     try {
       let { page, limit } = pagination;
       page = page ?? 1;
@@ -2387,6 +2402,16 @@ export class KaryawanService {
         .leftJoin('daftaremail as de', 'k.daftaremail_id', 'de.id')
         .leftJoin('logabsensi as la', 'k.absen_id', 'la.id');
       // Jika limit > 0, kita gunakan limit dan offset
+      console.log(filters?.role_id);
+      if (filters?.role_id == 'APPROVAL') {
+        const dataKaryawan = await dbMssql('karyawan')
+          .select('id')
+          .where('atasan_id', id);
+        query.whereIn(
+          'k.id',
+          dataKaryawan.map((item) => item.id),
+        );
+      }
       if (limit > 0) {
         query.limit(limit).offset(offset);
       }
@@ -2412,6 +2437,7 @@ export class KaryawanService {
 
       if (filters) {
         for (const [key, value] of Object.entries(filters)) {
+          if (key === 'role_id') continue;
           if (value || value === ' ') {
             // Normalisasi spasi (mengganti beberapa spasi dengan satu spasi dan trim)
             const normalizedValue =
@@ -2722,9 +2748,9 @@ export class KaryawanService {
     const workbook = new Workbook();
     const worksheet = workbook.addWorksheet('Data Export');
 
-    worksheet.mergeCells('A1:F1');
-    worksheet.mergeCells('A2:F2');
-    worksheet.mergeCells('A3:F3');
+    worksheet.mergeCells('A1:G1');
+    worksheet.mergeCells('A2:G2');
+    worksheet.mergeCells('A3:G3');
     worksheet.getCell('A1').value = 'PT. TRANSPORINDO AGUNG SEJAHTERA';
     worksheet.getCell('A2').value = 'LAPORAN HISTORI CUTI KARYAWAN';
     worksheet.getCell('A3').value = 'Data Export';
@@ -2746,7 +2772,8 @@ export class KaryawanService {
 
     const headers = [
       'No.',
-      'JENIS TRANSAKSI',
+      'NAMA KARYAWAN',
+      'KETERANGAN',
       'TANGGAL TRANSAKSI',
       'MASUK',
       'KELUAR',
@@ -2772,12 +2799,13 @@ export class KaryawanService {
 
     data.forEach((row, rowIndex) => {
       worksheet.getCell(rowIndex + 6, 1).value = rowIndex + 1;
-      worksheet.getCell(rowIndex + 6, 2).value = row.jenistransaksi;
-      worksheet.getCell(rowIndex + 6, 3).value = row.tglbukti;
-      worksheet.getCell(rowIndex + 6, 4).value = row.masuk;
-      worksheet.getCell(rowIndex + 6, 5).value = row.keluar;
-      worksheet.getCell(rowIndex + 6, 6).value = row.saldo;
-      worksheet.getCell(rowIndex + 6, 3).numFmt = 'DD-MM-YYYY';
+      worksheet.getCell(rowIndex + 6, 2).value = row.namakaryawan;
+      worksheet.getCell(rowIndex + 6, 3).value = row.jenistransaksi;
+      worksheet.getCell(rowIndex + 6, 4).value = row.tglbukti;
+      worksheet.getCell(rowIndex + 6, 5).value = row.masuk;
+      worksheet.getCell(rowIndex + 6, 6).value = row.keluar;
+      worksheet.getCell(rowIndex + 6, 7).value = row.saldo;
+      worksheet.getCell(rowIndex + 6, 4).numFmt = 'DD-MM-YYYY';
       for (let col = 1; col <= headers.length; col++) {
         const cell = worksheet.getCell(rowIndex + 6, col);
         cell.font = { name: 'Tahoma', size: 10 };
@@ -2794,10 +2822,11 @@ export class KaryawanService {
 
     worksheet.getColumn(1).width = 10;
     worksheet.getColumn(2).width = 40;
-    worksheet.getColumn(3).width = 30;
+    worksheet.getColumn(3).width = 40;
     worksheet.getColumn(4).width = 30;
     worksheet.getColumn(5).width = 20;
-    worksheet.getColumn(6).width = 30;
+    worksheet.getColumn(6).width = 20;
+    worksheet.getColumn(7).width = 20;
 
     const tempDir = path.resolve(process.cwd(), 'tmp');
     if (!fs.existsSync(tempDir)) {

@@ -67,6 +67,7 @@ import { JenisizinModule } from './modules/jenisizin/jenisizin.module';
 import { CronjobSaldocutiModule } from './modules/cronjob-saldocuti/cronjob-saldocuti.module';
 import { BotModule } from './modules/bot/bot.module';
 import { LogSaldoModule } from './modules/log_saldo/log_saldo.module';
+import { UsercabangModule } from './modules/usercabang/usercabang.module';
 
 @Module({
   imports: [
@@ -135,6 +136,7 @@ import { LogSaldoModule } from './modules/log_saldo/log_saldo.module';
     CronjobSaldocutiModule,
     BotModule,
     LogSaldoModule,
+    UsercabangModule,
   ],
   controllers: [],
   providers: [RabbitmqService],

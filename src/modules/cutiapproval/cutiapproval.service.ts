@@ -65,11 +65,7 @@ export class CutiapprovalService {
   ) {
     try {
       // 1. Update status approval
-      const tempTableName = `cuti_approval_cache_${karyawanId}`;
 
-      const dataTempTableName = await trx(tempTableName)
-        .select('sisacuti', 'prediksicuti')
-        .where('id', cutiId);
       const dataParameter = await trx('parameter')
         .where('grp', 'STATUS APPROVAL')
         .andWhere('text', 'APPROVAL');

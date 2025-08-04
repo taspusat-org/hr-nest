@@ -24,7 +24,7 @@ export class AuthService {
   async login(credentials: LoginDto): Promise<{
     accessToken: string;
     refreshToken: string;
-    cabang_id: string;
+    cabang_id: number[];
     users: Users & { cabang_nama: string };
     accessTokenExpiresIn: number;
     accessTokenExpires: Date;
@@ -59,7 +59,13 @@ export class AuthService {
       .pluck('role_id');
 
     const dataKaryawan = await this.utilsService.fetchKaryawanByUserId(user.id);
-
+    const cabangKaryawan = await dbMssql('usercabang')
+      .select('cabang_id')
+      .where('user_id', user.id);
+    console.log('cabangKaryawan', cabangKaryawan);
+    const cabangIds: number[] = cabangKaryawan.map(
+      ({ cabang_id }) => cabang_id,
+    );
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       throw new UnauthorizedException('Username atau password salah');
@@ -75,7 +81,7 @@ export class AuthService {
     const payload = {
       sub: user.id,
       user: userWithoutPassword,
-      cabang_id: user.cabang_id,
+      cabang_id: cabangIds,
     };
 
     const accessTokenExpiresIn = 7200; // 15 seconds
@@ -85,12 +91,12 @@ export class AuthService {
     const accessToken = this.jwtService.sign(payload, {
       expiresIn: accessTokenExpiresIn,
     });
-    const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
+    const refreshToken = this.jwtService.sign(payload, { expiresIn: '8h' });
 
     return {
       accessToken,
       refreshToken,
-      cabang_id: user.cabang_id,
+      cabang_id: cabangIds,
       users: userWithoutPassword,
       accessTokenExpiresIn,
       accessTokenExpires,
@@ -183,7 +189,7 @@ export class AuthService {
         expiresIn: accessTokenExpiresIn,
       });
 
-      const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
+      const refreshToken = this.jwtService.sign(payload, { expiresIn: '8h' });
 
       return {
         accessToken,

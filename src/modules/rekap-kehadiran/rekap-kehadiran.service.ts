@@ -289,29 +289,28 @@ export class RekapKehadiranService {
         atgl1.setDate(atgl1.getDate() + 1); // Increment `atgl1`, not startDate
       }
 
-      if (xidabsen === 14) {
-        await trx(tempShiftTableName).insert(
-          trx
-            .select(
-              trx.raw('? as absen_id', [xidabsen]),
-              'namakaryawan',
-              'hari',
-              trx.raw(
-                `CASE WHEN ? = 14 THEN '08:10:59' ELSE jammasukmulai END AS jammasukmulai`,
-                [xidabsen],
-              ),
-              trx.raw(
-                `CASE WHEN ? = 14 THEN '08:10' ELSE jammasuk END AS jammasuk`,
-                [xidabsen],
-              ),
-              'jampulang',
-              'batasjammasuk',
-            )
-            .from(tempShiftTableName),
-        );
-      }
+      // if (xidabsen === 14) {
+      //   await trx(tempShiftTableName).update(
+      //     trx
+      //       .select(
+      //         trx.raw('? as absen_id', [xidabsen]),
+      //         'namakaryawan',
+      //         'hari',
+      //         trx.raw(
+      //           `CASE WHEN ? = 14 THEN '08:10:59' ELSE jammasukmulai END AS jammasukmulai`,
+      //           [xidabsen],
+      //         ),
+      //         trx.raw(
+      //           `CASE WHEN ? = 14 THEN '08:10' ELSE jammasuk END AS jammasuk`,
+      //           [xidabsen],
+      //         ),
+      //         'jampulang',
+      //         'batasjammasuk',
+      //       )
+      //       .from(tempShiftTableName),
+      //   );
+      // }
     }
-
     const tempCutiTableName =
       '##temp_cuti_' + Math.random().toString(36).substring(2, 8);
 

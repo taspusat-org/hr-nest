@@ -178,11 +178,10 @@ export class KaryawanController {
         iskartucuti,
         trx, // Menggunakan transaksi dalam service
       );
-      const result2 = await trx(result);
       // Commit transaksi jika tidak ada error
       await trx.commit();
 
-      return result2;
+      return result;
     } catch (error) {
       // Rollback transaksi jika ada error
       console.log(error);
@@ -279,9 +278,12 @@ export class KaryawanController {
     if (!role_id?.includes('1')) {
       const userCabang = req.user.cabang_id;
       // kalau user di cabang 29, izinkan juga lihat cabang 30
-      filters.cabang_id = userCabang === 29 ? [29, 1135] : userCabang;
+      filters.cabang_id = userCabang;
     }
-
+    if (role_id?.includes('4') && !role_id?.includes('1')) {
+      filters.role_id = 'APPROVAL';
+    }
+    const id = req.user.user.karyawan_id;
     // ... rest tetap sama ...
     const params: FindAllParams = {
       search,
@@ -294,7 +296,7 @@ export class KaryawanController {
       },
     };
 
-    return this.karyawanService.findAllCabang(params);
+    return this.karyawanService.findAllCabang(params, id);
   }
 
   @Get('/export')

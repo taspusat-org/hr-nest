@@ -68,6 +68,9 @@ export class CronjobSaldocutiService {
       await this.botService.sendMessage(
         `Proses saldo awal gagal dijalankan untuk tanggal ${ptgl} ${currentTime}.❌, silahkan jalankan Manual melalui url (${process.env.URLWEB}/prosessaldo?ptgl=${ptgl})`,
       );
+      await this.botService.sendWhatsappMessage(
+        `Proses saldo awal gagal dijalankan untuk tanggal ${ptgl} ${currentTime}.❌, silahkan jalankan Manual melalui url (${process.env.URLWEB}/prosessaldo?ptgl=${ptgl})`,
+      );
     }
   }
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)

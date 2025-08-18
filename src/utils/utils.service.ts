@@ -491,3 +491,28 @@ export function addcslashes(str: string, chars: string): string {
   const regex = new RegExp(`[${escapedChars}]`, 'g');
   return str.replace(regex, '\\$&');
 }
+export const formatDateToSQL = (date: string): string | null => {
+  const parts = date.split('-');
+  if (parts.length !== 3) return null;
+
+  const [day, month, year] = parts.map((p) => parseInt(p, 10));
+  if (
+    isNaN(day) ||
+    isNaN(month) ||
+    isNaN(year) ||
+    day < 1 ||
+    day > 31 ||
+    month < 1 ||
+    month > 12 ||
+    year < 1000
+  ) {
+    return null;
+  }
+
+  const isoDate = new Date(year, month - 1, day); // bulan 0-based
+  if (isNaN(isoDate.getTime())) return null;
+
+  // Format: YYYY-MM-DD
+  const pad = (n: number) => (n < 10 ? '0' + n : n);
+  return `${isoDate.getFullYear()}-${pad(isoDate.getMonth() + 1)}-${pad(isoDate.getDate())}`;
+};

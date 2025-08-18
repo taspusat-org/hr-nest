@@ -79,7 +79,7 @@ export class ProsessaldoService {
         trx
           .select('id', 'cabang_id', 'namakaryawan', 'tglmasukkerja')
           .select(
-            trx.raw('12 - MONTH(tglmasukkerja) AS masuk'), // Calculate masuk based on months
+            trx.raw('12 - MONTH(tglmasukkerja) + 1 AS masuk'), // Calculate masuk based on months
           )
           .from('karyawan')
           .whereNotIn('cabang_id', idsCabangMasukKerja)
@@ -272,7 +272,7 @@ export class ProsessaldoService {
           .whereNull('tglresign')
           .whereNotIn('cabang_id', idsCabangMasukKerja),
       );
-
+      console.log(await trx(tempKaryawan1Tahun));
       await trx(tempKaryawanAKhirPriode).insert(
         trx
           .select('id', 'cabang_id', 'namakaryawan', 'tglmasukkerja')
@@ -372,8 +372,7 @@ export class ProsessaldoService {
               .andOn('A.periodetgldari', '=', 'B.periodetgldari')
               .andOn('A.periodetglsampai', '=', 'B.periodetglsampai');
           })
-          .whereNotIn('A.cabang_id', idsCabangMasukKerja)
-          .whereNull('B.karyawan_id'), // Ensure only missing entries are inserted
+          .whereNotIn('A.cabang_id', idsCabangMasukKerja),
       );
       // Step 5: Process SisaCuti based on cursor-like processing
       const cabangIds = [26, 27, 30, 31]; // Same as SQL Server cursor

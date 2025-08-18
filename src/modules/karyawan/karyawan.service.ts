@@ -9,7 +9,11 @@ import { UpdateKaryawanDto } from './dto/update-karyawan.dto';
 import { FindAllParams } from 'src/common/interfaces/all.interface';
 import { dbMssql } from 'src/common/utils/db';
 import { RedisService } from 'src/common/redis/redis.service';
-import { convertToDateFormat, UtilsService } from 'src/utils/utils.service';
+import {
+  convertToDateFormat,
+  formatDateToSQL,
+  UtilsService,
+} from 'src/utils/utils.service';
 import { LogtrailService } from 'src/common/logtrail/logtrail.service';
 import sharp from 'sharp';
 import { Workbook } from 'exceljs';
@@ -312,6 +316,7 @@ export class KaryawanService {
       t.datetime('periodedari');
       t.datetime('periodesampai');
       t.datetime('tglbukti');
+      t.datetime('tglbukti2');
       t.string('jenistransaksi', 1000);
       t.integer('masuk');
       t.integer('keluar');
@@ -327,6 +332,7 @@ export class KaryawanService {
       t.datetime('periodedari');
       t.datetime('periodesampai');
       t.datetime('tglbukti');
+      t.datetime('tglbukti2');
       t.string('jenistransaksi');
       t.integer('masuk');
       t.integer('keluar');
@@ -552,6 +558,7 @@ export class KaryawanService {
           'A.periodetgldari',
           'A.periodetglsampai',
           'A.tgltransaksi',
+          'A.tgltransaksi as tglbukti2',
           'A.jenistransaksi',
           'A.masuk',
           'A.keluar as keluar',
@@ -580,11 +587,12 @@ export class KaryawanService {
           'A.periodedari',
           'A.periodesampai',
           trx.raw('A.periodesampai AS tglbukti'),
+          trx.raw('A.periodesampai AS tglbukti2'),
           trx.raw("'hangus cuti' AS jenistransaksi"),
           trx.raw('0 AS masuk'),
           trx.raw('ISNULL(A.hanguscuti, 0) AS keluar'),
           trx.raw('ISNULL(A.hanguscuti, 0) AS keluarprediksi'),
-          trx.raw('2 AS typedata'), // Added typedata as in the original SQL query
+          trx.raw('5 AS typedata'), // Added typedata as in the original SQL query
           trx.raw('0 AS nonkartucuti'),
           trx.raw('0 AS cutiid'),
         )
@@ -598,6 +606,7 @@ export class KaryawanService {
           'B.periodecutidari as periodedari',
           'B.periodecutisampai as periodesampai',
           trx.raw('B.tglcuti AS tglbukti'),
+          trx.raw('B.tglcuti AS tglbukti2'),
           trx.raw('A.alasancuti AS jenistransaksi'),
           trx.raw('0 AS masuk'),
           trx.raw('0 AS keluar'),
@@ -635,15 +644,16 @@ export class KaryawanService {
           'a.periodedari',
           'a.periodesampai',
           'a.tglbukti',
+          'a.tglbukti2',
           'a.jenistransaksi',
           'a.masuk',
           'a.keluar',
           'a.keluarprediksi',
           trx.raw(
-            'SUM(a.masuk - a.keluar) OVER (PARTITION BY a.karyawan_id ORDER BY a.karyawan_id,a.tglbukti, (CASE WHEN ISNULL(b.id, 0) = 0 THEN a.tglbukti ELSE b.tglpengajuan END) ASC) AS qtysaldo',
+            'SUM(a.masuk - a.keluar) OVER (PARTITION BY a.karyawan_id ORDER BY a.karyawan_id,a.tglbukti, (CASE WHEN ISNULL(b.id, 0) = 0 THEN a.tglbukti2 ELSE b.tglpengajuan END) ASC) AS qtysaldo',
           ),
           trx.raw(
-            'SUM(a.masuk - a.keluarprediksi) OVER (PARTITION BY a.karyawan_id ORDER BY a.karyawan_id,a.tglbukti, (CASE WHEN ISNULL(b.id, 0) = 0 THEN a.tglbukti ELSE b.tglpengajuan END) ASC) AS qtysaldoprediksi',
+            'SUM(a.masuk - a.keluarprediksi) OVER (PARTITION BY a.karyawan_id ORDER BY a.karyawan_id,a.tglbukti, (CASE WHEN ISNULL(b.id, 0) = 0 THEN a.tglbukti2 ELSE b.tglpengajuan END) ASC) AS qtysaldoprediksi',
           ),
           'a.typedata',
           trx.raw('ISNULL(b.id, 0) AS cuti_id'),
@@ -684,15 +694,16 @@ export class KaryawanService {
             'a.periodedari',
             'a.periodesampai',
             'a.tglbukti',
+            'a.tglbukti2',
             'a.jenistransaksi',
             'a.masuk',
             'a.keluar',
             'a.keluarprediksi',
             trx.raw(
-              'SUM(a.masuk - a.keluar) OVER (PARTITION BY a.karyawan_id ORDER BY a.karyawan_id,a.tglbukti, (CASE WHEN ISNULL(b.id, 0) = 0 THEN a.tglbukti ELSE b.tglpengajuan END) ASC) AS qtysaldo',
+              'SUM(a.masuk - a.keluar) OVER (PARTITION BY a.karyawan_id ORDER BY a.karyawan_id,a.tglbukti, (CASE WHEN ISNULL(b.id, 0) = 0 THEN a.tglbukti2 ELSE b.tglpengajuan END) ASC) AS qtysaldo',
             ),
             trx.raw(
-              'SUM(a.masuk - a.keluarprediksi) OVER (PARTITION BY a.karyawan_id ORDER BY a.karyawan_id,a.tglbukti, (CASE WHEN ISNULL(b.id, 0) = 0 THEN a.tglbukti ELSE b.tglpengajuan END) ASC) AS qtysaldoprediksi',
+              'SUM(a.masuk - a.keluarprediksi) OVER (PARTITION BY a.karyawan_id ORDER BY a.karyawan_id,a.tglbukti, (CASE WHEN ISNULL(b.id, 0) = 0 THEN a.tglbukti2 ELSE b.tglpengajuan END) ASC) AS qtysaldoprediksi',
             ),
             'a.typedata',
             trx.raw('ISNULL(b.id, 0) AS cuti_id'),
@@ -936,7 +947,7 @@ export class KaryawanService {
     iskartucuti: any,
     trx: any,
   ) {
-    let tglakhir: any;
+    let tglakhir: Date; // Keep it as a Date object
     // Check if iskartucuti is 1 (equivalent to SQL @piskartucuti)
     const currentYear = new Date().getFullYear();
 
@@ -962,6 +973,8 @@ export class KaryawanService {
         tglakhir = new Date(Date.UTC(tahun, 11, 31)); // December 31st of the given year at UTC midnight
       }
     }
+
+    const formattedTglakhir = tglakhir;
 
     //
     const tempKaryawanId =
@@ -1065,6 +1078,7 @@ export class KaryawanService {
       t.datetime('periodedari');
       t.datetime('periodesampai');
       t.datetime('tglbukti');
+      t.datetime('tglbukti2');
       t.string('jenistransaksi', 1000);
       t.integer('masuk');
       t.integer('keluar');
@@ -1080,6 +1094,7 @@ export class KaryawanService {
       t.datetime('periodedari');
       t.datetime('periodesampai');
       t.datetime('tglbukti');
+      t.datetime('tglbukti2');
       t.string('jenistransaksi');
       t.integer('masuk');
       t.integer('keluar');
@@ -1243,7 +1258,7 @@ export class KaryawanService {
           .whereRaw(
             "A.periodetglsampai <= CAST(FORMAT(GETDATE(), 'yyyy/MM/dd') AS DATETIME)",
           )
-          .andWhere('A.tgltransaksi', '<', tglakhir)
+          .andWhere('A.tgltransaksi', '<', formattedTglakhir)
           .andWhereRaw('(ISNULL(D.statuscutibatal, 0)) <> 153')
           .andWhereRaw('(ISNULL(D.statuscuti, 0)) NOT IN (153,152,150)')
           .groupBy('A.karyawan_id', 'A.periodetgldari', 'A.periodetglsampai'),
@@ -1289,7 +1304,7 @@ export class KaryawanService {
           .whereRaw(
             "A.periodetglsampai <= CAST(FORMAT(GETDATE(), 'yyyy/MM/dd') AS DATETIME)",
           )
-          .andWhere('A.tgltransaksi', '<', tglakhir)
+          .andWhere('A.tgltransaksi', '<', formattedTglakhir)
           .andWhereRaw('(ISNULL(D.statuscutibatal, 0)) <> 153')
           .andWhereRaw('(ISNULL(D.statuscuti, 0)) NOT IN (153,152)')
           .groupBy('A.karyawan_id', 'A.periodetgldari', 'A.periodetglsampai'),
@@ -1329,7 +1344,7 @@ export class KaryawanService {
           .leftOuterJoin('cuti as d', 'A.cuti_id', 'd.id')
           .where('A.jenistransaksi', '=', 'saldo cuti')
           .andWhereRaw('(ISNULL(A.masuk, 0) - ISNULL(A.keluar, 0)) > 0')
-          .andWhere('A.tgltransaksi', '<', tglakhir)
+          .andWhere('A.tgltransaksi', '<', formattedTglakhir)
           .andWhereRaw('(ISNULL(D.statuscutibatal, 0)) <> 153')
           .andWhereRaw('(ISNULL(D.statuscuti, 0)) NOT IN (153,152,150)')
           .groupBy('A.karyawan_id', 'A.periodetgldari', 'A.periodetglsampai'),
@@ -1343,7 +1358,7 @@ export class KaryawanService {
           .leftOuterJoin('cuti as d', 'A.cuti_id', 'd.id')
           .where('A.jenistransaksi', '=', 'saldo cuti')
           .andWhereRaw('(ISNULL(A.masuk, 0) - ISNULL(A.keluar, 0)) > 0')
-          .andWhere('A.tgltransaksi', '<', tglakhir)
+          .andWhere('A.tgltransaksi', '<', formattedTglakhir)
           .andWhereRaw('(ISNULL(D.statuscutibatal, 0)) <> 153')
           .andWhereRaw('(ISNULL(D.statuscuti, 0)) NOT IN (153,152)')
           .groupBy('A.karyawan_id', 'A.periodetgldari', 'A.periodetglsampai'),
@@ -1371,8 +1386,8 @@ export class KaryawanService {
           })
           .innerJoin(`${tempKaryawanId} AS C`, 'A.karyawan_id', 'C.karyawan_id')
           .leftOuterJoin('cuti as d', 'A.cuti_id', 'd.id')
-          .where('A.periodetglsampai', '<=', tglakhir)
-          .andWhere('A.tgltransaksi', '<', tglakhir)
+          .where('A.periodetglsampai', '<=', formattedTglakhir)
+          .andWhere('A.tgltransaksi', '<', formattedTglakhir)
           .andWhereRaw('(ISNULL(D.statuscutibatal, 0)) <> 153')
           .andWhereRaw('(ISNULL(D.statuscuti, 0)) NOT IN (153,152,150)')
           .groupBy('A.karyawan_id', 'A.periodetgldari', 'A.periodetglsampai'),
@@ -1396,8 +1411,8 @@ export class KaryawanService {
           })
           .leftOuterJoin('cuti as d', 'A.cuti_id', 'd.id')
           .innerJoin(`${tempKaryawanId} AS C`, 'A.karyawan_id', 'C.karyawan_id')
-          .where('A.periodetglsampai', '<=', tglakhir)
-          .andWhere('A.tgltransaksi', '<', tglakhir)
+          .where('A.periodetglsampai', '<=', formattedTglakhir)
+          .andWhere('A.tgltransaksi', '<', formattedTglakhir)
           .andWhereRaw('(ISNULL(D.statuscutibatal, 0)) <> 153')
           .andWhereRaw('(ISNULL(D.statuscuti, 0)) NOT IN (153,152)')
           .groupBy('A.karyawan_id', 'A.periodetgldari', 'A.periodetglsampai'),
@@ -1448,6 +1463,8 @@ export class KaryawanService {
     if (minusCuti.minuscuti == 164) {
       await trx(tempHangusCuti).delete().whereRaw('hanguscuti <= 0');
     }
+    console.log(await trx('kartucuti').select('tgltransaksi'));
+
     // Insert into #tempkartucuti
     if (iskartucuti == 1) {
       await trx(tempKartucuti).insert(
@@ -1457,6 +1474,9 @@ export class KaryawanService {
             'A.periodetgldari',
             'A.periodetglsampai',
             'A.tgltransaksi',
+            trx.raw(
+              "(CASE WHEN A.jenistransaksi = 'SALDO CUTI' THEN CAST(A.periodetgldari AS DATETIME) ELSE CAST(A.tgltransaksi AS DATETIME) END) AS tglbukti2",
+            ),
             'A.jenistransaksi',
             'A.masuk',
             'A.keluar as keluar',
@@ -1469,13 +1489,18 @@ export class KaryawanService {
           )
           .from('kartucuti AS A')
           .innerJoin(`${tempKaryawanId} AS C`, 'A.karyawan_id', 'C.karyawan_id')
-          .leftOuterJoin('cuti as b', 'A.cuti_id', 'b.id')
-          // .whereRaw('(ISNULL(A.masuk, 0) - ISNULL(A.keluar, 0)) <> 0')
-          .andWhere('A.tgltransaksi', '<', tglakhir)
-          .andWhereRaw('(ISNULL(b.statuscutibatal, 0)) <> 153')
-          .andWhereRaw('(ISNULL(b.statuscuti, 0)) NOT IN (153,152,150)')
+          .leftOuterJoin('cuti AS B', 'A.cuti_id', 'B.id')
+          // Ensure valid dates are compared, and use proper ISNULL handling
+          .andWhere(
+            'A.tgltransaksi',
+            '<',
+            trx.raw('CAST(? AS DATETIME)', [formattedTglakhir]),
+          ) // Cast formattedTglakhir to DATETIME
+          .andWhereRaw('(ISNULL(B.statuscutibatal, 0)) <> 153')
+          .andWhereRaw('(ISNULL(B.statuscuti, 0)) NOT IN (153,152,150)')
           .orderBy('A.tgltransaksi'),
       );
+      console.log('masok');
     } else {
       await trx(tempKartucuti).insert(
         trx
@@ -1484,6 +1509,9 @@ export class KaryawanService {
             'A.periodetgldari',
             'A.periodetglsampai',
             'A.tgltransaksi',
+            trx.raw(
+              "(CASE WHEN A.jenistransaksi = 'SALDO CUTI' THEN CAST(A.periodetgldari AS DATETIME) ELSE CAST(A.tgltransaksi AS DATETIME) END) AS tglbukti2",
+            ),
             'A.jenistransaksi',
             'A.masuk',
             'A.keluar as keluar',
@@ -1498,7 +1526,11 @@ export class KaryawanService {
           .innerJoin(`${tempKaryawanId} AS C`, 'A.karyawan_id', 'C.karyawan_id')
           .leftOuterJoin('cuti as b', 'A.cuti_id', 'b.id')
           // .whereRaw('(ISNULL(A.masuk, 0) - ISNULL(A.keluar, 0)) <> 0')
-          .andWhere('A.tgltransaksi', '<', tglakhir)
+          .andWhere(
+            'A.tgltransaksi',
+            '<',
+            trx.raw('CAST(? AS DATETIME)', [formattedTglakhir]),
+          ) // Cast formattedTglakhir to DATETIME
           .andWhereRaw('(ISNULL(b.statuscutibatal, 0)) <> 153')
           .andWhereRaw('(ISNULL(b.statuscuti, 0)) NOT IN (153,152)')
           .orderBy('A.tgltransaksi'),
@@ -1513,11 +1545,12 @@ export class KaryawanService {
           'A.periodedari',
           'A.periodesampai',
           trx.raw('A.periodesampai AS tglbukti'),
+          trx.raw('A.periodesampai AS tglbukti2'),
           trx.raw("'hangus cuti' AS jenistransaksi"),
           trx.raw('0 AS masuk'),
           trx.raw('ISNULL(A.hanguscuti, 0) AS keluar'),
           trx.raw('ISNULL(A.hanguscuti, 0) AS keluarprediksi'),
-          trx.raw('2 AS typedata'), // Added typedata as in the original SQL query
+          trx.raw('5 AS typedata'), // Added typedata as in the original SQL query
           trx.raw('0 AS nonkartucuti'),
           trx.raw('0 AS cutiid'),
         )
@@ -1532,6 +1565,7 @@ export class KaryawanService {
             'B.periodecutidari as periodedari',
             'B.periodecutisampai as periodesampai',
             trx.raw('B.tglcuti AS tglbukti'),
+            trx.raw('B.tglcuti AS tglbukti2'),
             trx.raw('A.alasancuti AS jenistransaksi'),
             trx.raw('0 AS masuk'),
             trx.raw('0 AS keluar'),
@@ -1559,7 +1593,7 @@ export class KaryawanService {
           .whereRaw('ISNULL(C.cuti_id,0)=0')
           // .whereRaw('COALESCE(C.cuti_id, 0) = 0') // Using COALESCE instead of ISNULL
           // .andWhereRaw('COALESCE(A.statusnonhitung, 147) = 147') // Fixed the where clause
-          .andWhere('B.tglcuti', '<', tglakhir)
+          .andWhere('B.tglcuti', '<', formattedTglakhir)
           .andWhereRaw('(ISNULL(A.statuscutibatal, 0)) <> 153')
           .andWhereRaw('(ISNULL(A.statuscuti, 0)) NOT IN (153,152,150)')
           .orderBy('B.tglcuti'), // memastikan id yang dikirim adalah array
@@ -1573,6 +1607,7 @@ export class KaryawanService {
               'B.periodecutidari as periodedari',
               'B.periodecutisampai as periodesampai',
               trx.raw('B.tglcuti AS tglbukti'),
+              trx.raw('B.tglcuti AS tglbukti2'),
               trx.raw('A.alasancuti AS jenistransaksi'),
               trx.raw('0 AS masuk'),
               trx.raw('0 AS keluar'),
@@ -1604,7 +1639,7 @@ export class KaryawanService {
             .whereRaw('ISNULL(C.cuti_id,0)=0')
             // .whereRaw('COALESCE(C.cuti_id, 0) = 0') // Using COALESCE instead of ISNULL
             // .andWhereRaw('COALESCE(A.statusnonhitung, 147) = 147') // Fixed the where clause
-            // .andWhere('B.tglcuti', '<', tglakhir)
+            // .andWhere('B.tglcuti', '<', formattedTglakhir)
             .andWhereRaw('(ISNULL(A.statuscutibatal, 0)) <> 153')
             .andWhereRaw('(ISNULL(A.statuscuti, 0)) NOT IN (153,152)')
             .orderBy('B.tglcuti', 'desc'), // memastikan id yang dikirim adalah array
@@ -1617,6 +1652,7 @@ export class KaryawanService {
               'B.periodecutidari as periodedari',
               'B.periodecutisampai as periodesampai',
               trx.raw('B.tglcuti AS tglbukti'),
+              trx.raw('B.tglcuti AS tglbukti2'),
               trx.raw('A.alasancuti AS jenistransaksi'),
               trx.raw('0 AS masuk'),
               trx.raw('0 AS keluar'),
@@ -1648,7 +1684,7 @@ export class KaryawanService {
             .whereRaw('ISNULL(C.cuti_id,0)=0')
             // .whereRaw('COALESCE(C.cuti_id, 0) = 0') // Using COALESCE instead of ISNULL
             // .andWhereRaw('COALESCE(A.statusnonhitung, 147) = 147') // Fixed the where clause
-            .andWhere('B.tglcuti', '<', tglakhir)
+            .andWhere('B.tglcuti', '<', formattedTglakhir)
             .andWhereRaw('(ISNULL(A.statuscutibatal, 0)) <> 153')
             .andWhereRaw('(ISNULL(A.statuscuti, 0)) NOT IN (153,152)')
             .orderBy('B.tglcuti', 'desc'), // memastikan id yang dikirim adalah array
@@ -1662,15 +1698,16 @@ export class KaryawanService {
           'a.periodedari',
           'a.periodesampai',
           'a.tglbukti',
+          'a.tglbukti2',
           'a.jenistransaksi',
           'a.masuk',
           'a.keluar',
           'a.keluarprediksi',
           trx.raw(
-            'SUM(a.masuk - a.keluar) OVER (PARTITION BY a.karyawan_id ORDER BY a.karyawan_id,a.tglbukti, (CASE WHEN ISNULL(b.id, 0) = 0 THEN a.tglbukti ELSE b.tglpengajuan END),a.typedata ASC) AS qtysaldo',
+            'SUM(a.masuk - a.keluar) OVER (PARTITION BY a.karyawan_id ORDER BY a.karyawan_id,a.tglbukti2, (CASE WHEN ISNULL(b.id, 0) = 0 THEN a.tglbukti2 ELSE b.tglpengajuan END),a.typedata ASC) AS qtysaldo',
           ),
           trx.raw(
-            'SUM(a.masuk - a.keluarprediksi) OVER (PARTITION BY a.karyawan_id ORDER BY a.karyawan_id,a.tglbukti, (CASE WHEN ISNULL(b.id, 0) = 0 THEN a.tglbukti ELSE b.tglpengajuan END),a.typedata ASC) AS qtysaldoprediksi',
+            'SUM(a.masuk - a.keluarprediksi) OVER (PARTITION BY a.karyawan_id ORDER BY a.karyawan_id,a.tglbukti2, (CASE WHEN ISNULL(b.id, 0) = 0 THEN a.tglbukti2 ELSE b.tglpengajuan END),a.typedata ASC) AS qtysaldoprediksi',
           ),
           'a.typedata',
           trx.raw('ISNULL(b.id, 0) AS cuti_id'),
@@ -1683,9 +1720,10 @@ export class KaryawanService {
             .andOn('a.karyawan_id', '=', 'b.karyawan_id');
         })
         .orderBy('a.karyawan_id')
+        .orderBy('a.typedata')
         .orderBy(
           trx.raw(
-            '(CASE WHEN ISNULL(b.id, 0) = 0 THEN a.tglbukti ELSE b.tglpengajuan END),a.typedata',
+            '(CASE WHEN ISNULL(b.id, 0) = 0 THEN a.tglbukti2 ELSE b.tglpengajuan END),a.typedata',
           ),
         ),
     );
@@ -1708,15 +1746,16 @@ export class KaryawanService {
             'a.periodedari',
             'a.periodesampai',
             'a.tglbukti',
+            'a.tglbukti2',
             'a.jenistransaksi',
             'a.masuk',
             'a.keluar',
             'a.keluarprediksi',
             trx.raw(
-              'SUM(a.masuk - a.keluar) OVER (PARTITION BY a.karyawan_id ORDER BY a.karyawan_id, (CASE WHEN ISNULL(b.id, 0) = 0 THEN a.tglbukti ELSE b.tglpengajuan END),a.typedata ASC) AS qtysaldo',
+              'SUM(a.masuk - a.keluar) OVER (PARTITION BY a.karyawan_id ORDER BY a.karyawan_id, (CASE WHEN ISNULL(b.id, 0) = 0 THEN a.tglbukti2 ELSE b.tglpengajuan END), a.typedata ASC) AS qtysaldo',
             ),
             trx.raw(
-              'SUM(a.masuk - a.keluarprediksi) OVER (PARTITION BY a.karyawan_id ORDER BY a.karyawan_id, (CASE WHEN ISNULL(b.id, 0) = 0 THEN a.tglbukti ELSE b.tglpengajuan END),a.typedata ASC) AS qtysaldoprediksi',
+              'SUM(a.masuk - a.keluarprediksi) OVER (PARTITION BY a.karyawan_id ORDER BY a.karyawan_id, (CASE WHEN ISNULL(b.id, 0) = 0 THEN a.tglbukti2 ELSE b.tglpengajuan END), a.typedata ASC) AS qtysaldoprediksi',
             ),
             'a.typedata',
             trx.raw('ISNULL(b.id, 0) AS cuti_id'),
@@ -1729,9 +1768,11 @@ export class KaryawanService {
               .andOn('a.karyawan_id', '=', 'b.karyawan_id');
           })
           .orderBy('a.karyawan_id')
+          .orderBy('a.typedata')
+
           .orderBy(
             trx.raw(
-              '(CASE WHEN ISNULL(b.id, 0) = 0 THEN a.tglbukti ELSE b.tglpengajuan END),a.typedata',
+              '(CASE WHEN ISNULL(b.id, 0) = 0 THEN a.tglbukti2 ELSE b.tglpengajuan END), a.typedata',
             ),
           ),
       );
@@ -1776,10 +1817,10 @@ export class KaryawanService {
           'a.keluar',
           'a.keluarprediksi',
           trx.raw(
-            'SUM(a.masuk - a.keluar) OVER (PARTITION BY a.karyawan_id ORDER BY a.karyawan_id,a.tglbukti, (CASE WHEN ISNULL(a.cuti_id, 0) = 0 THEN a.tglbukti ELSE a.tglpengajuan END),a.typedata ASC) AS saldo',
+            'SUM(a.masuk - a.keluar) OVER (PARTITION BY a.karyawan_id ORDER BY a.karyawan_id,a.tglbukti2, (CASE WHEN ISNULL(a.cuti_id, 0) = 0 THEN a.tglbukti2 ELSE a.tglpengajuan END),a.typedata ASC) AS saldo',
           ),
           trx.raw(
-            'SUM(a.masuk - a.keluarprediksi) OVER (PARTITION BY a.karyawan_id ORDER BY a.karyawan_id,a.tglbukti, (CASE WHEN ISNULL(a.cuti_id, 0) = 0 THEN a.tglbukti ELSE a.tglpengajuan END),a.typedata ASC) AS saldoprediksi',
+            'SUM(a.masuk - a.keluarprediksi) OVER (PARTITION BY a.karyawan_id ORDER BY a.karyawan_id,a.tglbukti2, (CASE WHEN ISNULL(a.cuti_id, 0) = 0 THEN a.tglbukti2 ELSE a.tglpengajuan END),a.typedata ASC) AS saldoprediksi',
           ),
           'a.cuti_id',
           'a.typedata',
@@ -1787,9 +1828,10 @@ export class KaryawanService {
         .from(`${tempListData} AS a`)
         .innerJoin(`${tempKaryawanId} AS C`, 'A.karyawan_id', 'C.karyawan_id')
         .orderBy('a.karyawan_id')
+        .orderBy('a.typedata')
         .orderBy(
           trx.raw(
-            '(CASE WHEN ISNULL(a.cuti_id, 0) = 0 THEN a.tglbukti ELSE a.tglpengajuan END),a.typedata',
+            '(CASE WHEN ISNULL(a.cuti_id, 0) = 0 THEN a.tglbukti2 ELSE a.tglpengajuan END),a.typedata',
           ),
         ),
     );
@@ -2402,7 +2444,6 @@ export class KaryawanService {
         .leftJoin('daftaremail as de', 'k.daftaremail_id', 'de.id')
         .leftJoin('logabsensi as la', 'k.absen_id', 'la.id');
       // Jika limit > 0, kita gunakan limit dan offset
-      console.log(filters?.role_id);
       if (filters?.role_id == 'APPROVAL') {
         const dataKaryawan = await dbMssql('karyawan')
           .select('id')

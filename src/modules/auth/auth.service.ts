@@ -91,7 +91,7 @@ export class AuthService {
     const accessToken = this.jwtService.sign(payload, {
       expiresIn: accessTokenExpiresIn,
     });
-    const refreshToken = this.jwtService.sign(payload, { expiresIn: '8h' });
+    const refreshToken = this.jwtService.sign(payload, { expiresIn: '1h' });
 
     return {
       accessToken,
@@ -160,11 +160,6 @@ export class AuthService {
       const dataKaryawan = await this.utilsService.fetchKaryawanByUserId(
         user.id,
       );
-
-      const roles = await dbMssql('userrole')
-        .where({ user_id: user.id })
-        .pluck('role_id');
-
       // Remove password and include cabang_nama in the returned user object
       const { password: _, ...restUser } = user;
       const userWithoutPassword: Users & { cabang_nama: string } = {
@@ -189,7 +184,7 @@ export class AuthService {
         expiresIn: accessTokenExpiresIn,
       });
 
-      const refreshToken = this.jwtService.sign(payload, { expiresIn: '8h' });
+      const refreshToken = this.jwtService.sign(payload, { expiresIn: '1h' });
 
       return {
         accessToken,
@@ -200,6 +195,7 @@ export class AuthService {
         accessTokenExpires,
       };
     } catch (e) {
+      console.error('Error refreshing token:', e);
       throw new UnauthorizedException('Refresh token tidak valid');
     }
   }

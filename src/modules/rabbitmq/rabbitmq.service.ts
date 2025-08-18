@@ -6,7 +6,7 @@ export class RabbitmqService {
   @Client({
     transport: Transport.RMQ,
     options: {
-      urls: ['amqp://admin:123456@54.151.162.192:5672'], // URL RabbitMQ
+      urls: ['amqp://admin:admin@54.151.162.192:5672'], // URL RabbitMQ
       queue: 'hr_queue_dev', // RabbitMQ queue name
       queueOptions: {
         durable: true, // Queue durability untuk persistensi

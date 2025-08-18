@@ -11,6 +11,7 @@ import sharp, { FormatEnum } from 'sharp';
 import multer from 'multer';
 import path from 'path';
 import * as fs from 'fs';
+import { randomBytes } from 'crypto';
 
 const mimeToSharpFormat: { [key: string]: keyof FormatEnum } = {
   'image/jpeg': 'jpeg',
@@ -397,23 +398,25 @@ export class UtilsService {
   }
 
   async compressImage(file: Express.Multer.File): Promise<string> {
-    const outputDir = path.join(process.cwd(), 'uploads/compress');
+    const outputDir = path.join(process.cwd(), 'uploads', 'compress');
     if (!fs.existsSync(outputDir)) {
       fs.mkdirSync(outputDir, { recursive: true });
     }
 
-    const extname = path.extname(file.originalname);
-    const fileName = `medium_${Date.now()}${extname}`; // Menambahkan 'medium_' sebelum nama file
+    // pakai format output yang konsisten dgn mimetype
+    const outFormat = mimeToSharpFormat[file.mimetype] ?? 'png';
+    const outExt = outFormat === 'jpeg' ? '.jpg' : `.${outFormat}`;
+
+    // nama file pendek tapi unik: "medium_" + timestamp base36 + 6 hex acak
+    const ts = Date.now().toString(36); // contoh: "m5z6w8f"
+    const rnd = randomBytes(3).toString('hex'); // contoh: "7fa91c"
+    const fileName = `medium_${ts}${rnd}${outExt}`;
     const filePath = path.join(outputDir, fileName);
 
-    const format = mimeToSharpFormat[file.mimetype]; // Pastikan mimeToSharpFormat didefinisikan dengan benar
-    const compressedImageBuffer = await sharp(file.buffer)
-      .resize(1200) // Resize image to 1200px width
-      .toFormat(format) // Convert image to appropriate format
-      .toBuffer();
+    await sharp(file.buffer).resize(1200).toFormat(outFormat).toFile(filePath);
 
-    fs.writeFileSync(filePath, compressedImageBuffer);
-    return fileName; // Return the name of the compressed file
+    console.log('fileName', fileName);
+    return fileName;
   }
 }
 

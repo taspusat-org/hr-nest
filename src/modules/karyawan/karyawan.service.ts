@@ -1667,10 +1667,10 @@ export class KaryawanService {
           'a.keluar',
           'a.keluarprediksi',
           trx.raw(
-            'SUM(a.masuk - a.keluar) OVER (PARTITION BY a.karyawan_id ORDER BY a.karyawan_id,a.tglbukti, (CASE WHEN ISNULL(b.id, 0) = 0 THEN a.tglbukti ELSE b.tglpengajuan END) ASC) AS qtysaldo',
+            'SUM(a.masuk - a.keluar) OVER (PARTITION BY a.karyawan_id ORDER BY a.karyawan_id,a.tglbukti, (CASE WHEN ISNULL(b.id, 0) = 0 THEN a.tglbukti ELSE b.tglpengajuan END),a.typedata ASC) AS qtysaldo',
           ),
           trx.raw(
-            'SUM(a.masuk - a.keluarprediksi) OVER (PARTITION BY a.karyawan_id ORDER BY a.karyawan_id,a.tglbukti, (CASE WHEN ISNULL(b.id, 0) = 0 THEN a.tglbukti ELSE b.tglpengajuan END) ASC) AS qtysaldoprediksi',
+            'SUM(a.masuk - a.keluarprediksi) OVER (PARTITION BY a.karyawan_id ORDER BY a.karyawan_id,a.tglbukti, (CASE WHEN ISNULL(b.id, 0) = 0 THEN a.tglbukti ELSE b.tglpengajuan END),a.typedata ASC) AS qtysaldoprediksi',
           ),
           'a.typedata',
           trx.raw('ISNULL(b.id, 0) AS cuti_id'),
@@ -1685,7 +1685,7 @@ export class KaryawanService {
         .orderBy('a.karyawan_id')
         .orderBy(
           trx.raw(
-            'CASE WHEN ISNULL(b.id, 0) = 0 THEN a.tglbukti ELSE b.tglpengajuan END',
+            '(CASE WHEN ISNULL(b.id, 0) = 0 THEN a.tglbukti ELSE b.tglpengajuan END),a.typedata',
           ),
         ),
     );
@@ -1713,10 +1713,10 @@ export class KaryawanService {
             'a.keluar',
             'a.keluarprediksi',
             trx.raw(
-              'SUM(a.masuk - a.keluar) OVER (PARTITION BY a.karyawan_id ORDER BY a.karyawan_id, (CASE WHEN ISNULL(b.id, 0) = 0 THEN a.tglbukti ELSE b.tglpengajuan END) ASC) AS qtysaldo',
+              'SUM(a.masuk - a.keluar) OVER (PARTITION BY a.karyawan_id ORDER BY a.karyawan_id, (CASE WHEN ISNULL(b.id, 0) = 0 THEN a.tglbukti ELSE b.tglpengajuan END),a.typedata ASC) AS qtysaldo',
             ),
             trx.raw(
-              'SUM(a.masuk - a.keluarprediksi) OVER (PARTITION BY a.karyawan_id ORDER BY a.karyawan_id, (CASE WHEN ISNULL(b.id, 0) = 0 THEN a.tglbukti ELSE b.tglpengajuan END) ASC) AS qtysaldoprediksi',
+              'SUM(a.masuk - a.keluarprediksi) OVER (PARTITION BY a.karyawan_id ORDER BY a.karyawan_id, (CASE WHEN ISNULL(b.id, 0) = 0 THEN a.tglbukti ELSE b.tglpengajuan END),a.typedata ASC) AS qtysaldoprediksi',
             ),
             'a.typedata',
             trx.raw('ISNULL(b.id, 0) AS cuti_id'),
@@ -1731,7 +1731,7 @@ export class KaryawanService {
           .orderBy('a.karyawan_id')
           .orderBy(
             trx.raw(
-              'CASE WHEN ISNULL(b.id, 0) = 0 THEN a.tglbukti ELSE b.tglpengajuan END',
+              '(CASE WHEN ISNULL(b.id, 0) = 0 THEN a.tglbukti ELSE b.tglpengajuan END),a.typedata',
             ),
           ),
       );
@@ -1776,10 +1776,10 @@ export class KaryawanService {
           'a.keluar',
           'a.keluarprediksi',
           trx.raw(
-            'SUM(a.masuk - a.keluar) OVER (PARTITION BY a.karyawan_id ORDER BY a.karyawan_id,a.tglbukti, (CASE WHEN ISNULL(a.cuti_id, 0) = 0 THEN a.tglbukti ELSE a.tglpengajuan END) ASC) AS saldo',
+            'SUM(a.masuk - a.keluar) OVER (PARTITION BY a.karyawan_id ORDER BY a.karyawan_id,a.tglbukti, (CASE WHEN ISNULL(a.cuti_id, 0) = 0 THEN a.tglbukti ELSE a.tglpengajuan END),a.typedata ASC) AS saldo',
           ),
           trx.raw(
-            'SUM(a.masuk - a.keluarprediksi) OVER (PARTITION BY a.karyawan_id ORDER BY a.karyawan_id,a.tglbukti, (CASE WHEN ISNULL(a.cuti_id, 0) = 0 THEN a.tglbukti ELSE a.tglpengajuan END) ASC) AS saldoprediksi',
+            'SUM(a.masuk - a.keluarprediksi) OVER (PARTITION BY a.karyawan_id ORDER BY a.karyawan_id,a.tglbukti, (CASE WHEN ISNULL(a.cuti_id, 0) = 0 THEN a.tglbukti ELSE a.tglpengajuan END),a.typedata ASC) AS saldoprediksi',
           ),
           'a.cuti_id',
           'a.typedata',
@@ -1789,7 +1789,7 @@ export class KaryawanService {
         .orderBy('a.karyawan_id')
         .orderBy(
           trx.raw(
-            'CASE WHEN ISNULL(a.cuti_id, 0) = 0 THEN a.tglbukti ELSE a.tglpengajuan END',
+            '(CASE WHEN ISNULL(a.cuti_id, 0) = 0 THEN a.tglbukti ELSE a.tglpengajuan END),a.typedata',
           ),
         ),
     );
@@ -2549,9 +2549,8 @@ export class KaryawanService {
   async findProfileKaryawan(id: number, trx: any) {
     const dataRekapCuti = await this.rekapCuti(String(id), 1, trx);
 
-    console.log(dataRekapCuti);
     // Pastikan lastCuti tidak null atau undefined sebelum melanjutkan
-    const lastCuti = await dbMssql('cuti')
+    const lastCuti = await trx('cuti')
       .select('id')
       .where('karyawan_id', id)
       .orderBy('created_at', 'desc') // Urutkan berdasarkan tglcuti terakhir
@@ -2567,7 +2566,7 @@ export class KaryawanService {
       };
     }
 
-    const dataApproval = await dbMssql('cutiapproval')
+    const dataApproval = await trx('cutiapproval')
       .select('tglapproval', 'jenjangapproval')
       .where('cuti_id', lastCuti.id)
       .orderBy('jenjangapproval', 'desc') // Urutkan berdasarkan jenjangapproval, yang tertinggi di atas

@@ -634,7 +634,7 @@ export class KaryawanController {
       return result;
     } catch (error) {
       // Rollback in case of an error
-
+      console.error('error', error);
       await trx.rollback();
       throw new Error(`Error updating Karyawan: ${error}`);
     }

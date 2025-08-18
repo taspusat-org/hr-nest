@@ -133,6 +133,11 @@ export class CutiService {
         0,
         trx,
       );
+      const dataTempTglCuti = await this.tempTglCuti(
+        [String(rawFilters?.karyawan_id)],
+        dbMssql,
+      );
+
       const query = trx(`${this.tableName} as c`)
         .select([
           'c.id as id',
@@ -140,7 +145,7 @@ export class CutiService {
           'c.karyawan_id',
           'k.namakaryawan as namakaryawan',
           'k.namaalias as namaalias',
-          'c.tglcuti',
+          'ttgl.tglcuti',
           'c.statuscuti',
           'p.memo as statuscuti_memo',
           'c.statuscutibatal',
@@ -172,12 +177,12 @@ export class CutiService {
         .leftJoin('parameter as sh', 'c.statusnonhitung', 'sh.id')
         .leftJoin('cutidetail as cd', 'c.id', 'cd.cuti_id')
         .leftJoin(`${datatempJatahCutiHasil2} as tc`, 'c.id', 'tc.cuti_id')
+        .leftJoin(`${dataTempTglCuti} as ttgl`, 'c.id', 'ttgl.cuti_id')
         .orderBy(sortBy ? `c.${sortBy}` : 'c.id', sortDirection || 'desc');
 
       if (search) {
         query.where((builder) => {
           builder
-            .orWhere('c.tglcuti', 'like', `%${search}%`)
             .orWhere('k.namakaryawan', 'like', `%${search}%`)
             .orWhere('k.namaalias', 'like', `%${search}%`)
             .orWhere('c.ket', 'like', `%${search}%`)
@@ -200,9 +205,6 @@ export class CutiService {
               ]);
             } else if (key === 'memo') {
               query.andWhere(`p.${key}`, '=', value);
-            } else if (key === 'year') {
-              // Filter untuk tglpengajuan dengan format 'dd-MM-yyyy'
-              query.andWhereRaw('YEAR(cd.tglcuti) = ?', [value]);
             } else {
               query.andWhere(`c.${key}`, 'like', `%${value}%`);
             }
@@ -328,7 +330,7 @@ export class CutiService {
         namakaryawan: dataKaryawan.namakaryawan,
         status: 'DIAJUKAN',
         statussubject: '(DIAJUKAN)',
-        tglCuti: newItem.tglcuti,
+        tglCuti: dataToCreate.tglcuti,
         tglPengajuan: formattedTglPengajuan,
       };
 
@@ -418,6 +420,10 @@ export class CutiService {
 
     // 3. Gunakan filterObj di query nanti
     const filterObj = rawFilters;
+    const dataTempTglCuti = await this.tempTglCuti(
+      [String(rawFilters?.karyawan_id)],
+      dbMssql,
+    );
     const query = trx(`${this.tableName} as c`)
       .select([
         'c.id as id',
@@ -425,7 +431,7 @@ export class CutiService {
         'c.karyawan_id',
         'k.namakaryawan as namakaryawan',
         'k.namaalias as namaalias',
-        'c.tglcuti',
+        'ttgl.tglcuti',
         'c.statuscuti',
         'p.memo as statuscuti_memo',
         'c.statuscutibatal',
@@ -456,12 +462,12 @@ export class CutiService {
       .leftJoin('parameter as cat', 'c.kategoricuti_id', 'cat.id')
       .leftJoin('parameter as sh', 'c.statusnonhitung', 'sh.id')
       .leftJoin('cutidetail as cd', 'c.id', 'cd.cuti_id')
+      .leftJoin(`${dataTempTglCuti} as ttgl`, 'c.id', 'ttgl.cuti_id')
       .orderBy(sortBy ? `c.${sortBy}` : 'c.id', sortDirection || 'desc');
 
     if (search) {
       query.where((builder) => {
         builder
-          .orWhere('c.tglcuti', 'like', `%${search}%`)
           .orWhere('k.namakaryawan', 'like', `%${search}%`)
           .orWhere('k.namaalias', 'like', `%${search}%`)
           .orWhere('c.ket', 'like', `%${search}%`)
@@ -484,9 +490,6 @@ export class CutiService {
             ]);
           } else if (key === 'memo') {
             query.andWhere(`p.${key}`, '=', value);
-          } else if (key === 'year') {
-            // Filter untuk tglpengajuan dengan format 'dd-MM-yyyy'
-            query.andWhereRaw('YEAR(cd.tglcuti) = ?', [value]);
           } else {
             query.andWhere(`c.${key}`, 'like', `%${value}%`);
           }
@@ -553,6 +556,11 @@ export class CutiService {
       //   await dbMssql(datatempJatahCutiHasil2),
       // );
 
+      const dataTempTglCuti = await this.tempTglCuti(
+        [String(filters?.karyawan_id)],
+        dbMssql,
+      );
+
       const query = dbMssql(`${this.tableName} as c`)
         .select([
           'c.id as id',
@@ -560,7 +568,7 @@ export class CutiService {
           'c.karyawan_id',
           'k.namakaryawan as namakaryawan',
           'k.namaalias as namaalias',
-          'c.tglcuti',
+          'ttgl.tglcuti',
           'c.statuscuti',
           'c.statuscutibatal',
           'b.memo as statuscutibatal_memo',
@@ -613,6 +621,7 @@ export class CutiService {
         .leftJoin('parameter as b', 'c.statuscutibatal', 'b.id')
         .leftJoin('parameter as cat', 'c.kategoricuti_id', 'cat.id')
         .leftJoin(`${datatempJatahCutiHasil2} as tc`, 'c.id', 'tc.cuti_id')
+        .leftJoin(`${dataTempTglCuti} as ttgl`, 'c.id', 'ttgl.cuti_id')
         // .join('cutidetail as cd', 'c.id', 'cd.cuti_id')
         .leftJoin('parameter as sh', 'c.statusnonhitung', 'sh.id');
 
@@ -857,51 +866,19 @@ export class CutiService {
       const cutiApprovalIds = await trx('cutiApproval')
         .select('cuti_id')
         .where('karyawan_id', '=', karyawan_id);
+      const karyawanIdRows = await trx('cuti as c')
+        .distinct('c.karyawan_id')
+        .whereIn('c.id', trx.select('cuti_id').from(tempApprovalCuti));
 
-      // Jika tidak ada cutiApproval yang ditemukan, kembalikan data kosong
-      // if (cutiApprovalIds.length === 0) {
-      //   return {
-      //     data: [],
-      //     total: 0,
-      //     pagination: {
-      //       currentPage: 1,
-      //       totalPages: 1,
-      //       totalItems: 0,
-      //       itemsPerPage: 0,
-      //     },
-      //   };
-      // }
+      // Ubah ke array string & pastikan unik (distinct sudah menghindari duplikat)
+      const karyawanIdArray: string[] = karyawanIdRows.map((r) =>
+        String(r.karyawan_id),
+      );
 
-      // const karyawanIdCutiPromises = cutiApprovalIds.map(async (cuti) => {
-      //   const karyawanData = await trx('cuti')
-      //     .select('karyawan_id')
-      //     .where('id', cuti.cuti_id)
-      //     .first();
-      //   return karyawanData; // Mengembalikan data karyawan_id
-      // });
-
-      // // Tunggu hingga semua query selesai
-      // const karyawanIdCuti = await Promise.all(karyawanIdCutiPromises);
-      // const filteredKaryawanIdCuti = [
-      //   ...new Map(
-      //     karyawanIdCuti
-      //       .filter((item) => item !== undefined)
-      //       .map((item) => [item.karyawan_id, item]),
-      //   ).values(),
-      // ];
-      // const karyawanIds = filteredKaryawanIdCuti.map(
-      //   (item) => item.karyawan_id,
-      // );
-      // // Panggil rekapCuti dengan karyawan_id yang sudah difilter
-      // const datatempJatahCutiHasil2 =
-      //   await this.karyawanService.rekapCutiAllKaryawan(
-      //     karyawanIds, // Gabungkan karyawan_id menjadi string dengan koma sebagai pemisah
-      //     0,
-      //     0,
-      //     0,
-      //     trx,
-      //   );
-      // Langkah 2: Ambil data cuti berdasarkan cuti_id yang ada di cutiApproval
+      // Panggil tempTglCuti dengan array karyawan_id (pakai trx yang sama!)
+      const dataTempTglCuti = karyawanIdArray.length
+        ? await this.tempTglCuti(karyawanIdArray, trx)
+        : null;
       const query = trx('cuti as c')
         .select([
           'c.id as id',
@@ -910,7 +887,7 @@ export class CutiService {
           'k.namakaryawan as namakaryawan',
           'k.foto as fotokaryawan',
           'k.namaalias as namaalias',
-          'c.tglcuti',
+          'ttgl.tglcuti',
           'c.statuscuti',
           'p.memo as statuscuti_memo',
           'p.text as statuscuti_text',
@@ -955,6 +932,7 @@ export class CutiService {
         .leftJoin('parameter as cat', 'c.kategoricuti_id', 'cat.id')
         .leftJoin('parameter as sh', 'c.statusnonhitung', 'sh.id')
         .leftJoin(`${tempApprovalCuti} as ca`, 'c.id', 'ca.cuti_id')
+        .leftJoin(`${dataTempTglCuti} as ttgl`, 'c.id', 'ttgl.cuti_id')
         // .leftJoin(`${datatempJatahCutiHasil2} as tc`, 'c.id', 'tc.cuti_id')
         .whereIn(
           'c.id',
@@ -1027,7 +1005,6 @@ export class CutiService {
       if (search) {
         query.where((builder) => {
           builder
-            .orWhere('c.tglcuti', 'like', `%${search}%`)
             .orWhere('c.alasancuti', 'like', `%${search}%`)
             .orWhere('c.namakaryawan', 'like', `%${search}%`)
             .orWhere('c.namaalias', 'like', `%${search}%`);
@@ -2098,7 +2075,6 @@ export class CutiService {
           'c.karyawan_id',
           'k.namakaryawan as namakaryawan',
           'k.namaalias as namaalias',
-          'c.tglcuti',
           'c.statuscuti',
           'p.memo as statuscuti_memo',
           'c.statuscutibatal',
@@ -2189,6 +2165,61 @@ export class CutiService {
     } catch (error) {
       console.error('Error updating statuscuti:', error);
       throw error;
+    }
+  }
+
+  async tempTglCuti(karyawan_id: string[], trx: any) {
+    try {
+      const TempTglCuti =
+        '##TempTglCuti' + Math.random().toString(36).substring(2, 8);
+      const TempRekap =
+        '##TempRekap' + Math.random().toString(36).substring(2, 8);
+      await trx.schema.createTable(TempTglCuti, (t) => {
+        t.integer('cuti_id');
+        t.date('tglcuti');
+      });
+      await trx.schema.createTable(TempRekap, (t) => {
+        t.integer('cuti_id');
+        t.text('tglcuti');
+      });
+
+      await trx(TempTglCuti).insert(
+        trx
+          .select('A.id', 'B.tglcuti')
+          .from('cuti AS A')
+          .innerJoin('cutidetail AS B', 'A.id', 'B.cuti_id')
+          .innerJoin('karyawan AS c', 'A.karyawan_id', 'c.id')
+          .whereIn('A.karyawan_id', karyawan_id)
+          .orderBy('a.id')
+          .orderBy('b.tglcuti'),
+      );
+
+      await trx(TempRekap).insert(
+        trx
+          .select('cuti_id')
+          .select(
+            trx.raw(`
+              UPPER(
+                STRING_AGG(
+                  LEFT(FORMAT(tglcuti, 'dddd'), 3) + ' ' +
+                  FORMAT(tglcuti, 'dd') + ' ' +
+                  LEFT(FORMAT(tglcuti, 'MMMM'), 3) + ' ' +
+                  FORMAT(tglcuti, 'yyyy'),
+                  ' ,'
+                ) WITHIN GROUP (ORDER BY tglcuti ASC)
+              ) AS tglcuti
+            `),
+          )
+          .from(TempTglCuti)
+          .groupBy('cuti_id'),
+      );
+
+      return TempRekap;
+    } catch (error) {
+      console.error('Error creating temporary table:', error);
+      throw new InternalServerErrorException(
+        `Error creating temporary table: ${error.message}`,
+      );
     }
   }
 }

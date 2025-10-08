@@ -135,7 +135,7 @@ export class CutiService {
       );
       const dataTempTglCuti = await this.tempTglCuti(
         [String(rawFilters?.karyawan_id)],
-        dbMssql,
+        trx,
       );
 
       const query = trx(`${this.tableName} as c`)
@@ -205,6 +205,8 @@ export class CutiService {
               ]);
             } else if (key === 'memo') {
               query.andWhere(`p.${key}`, '=', value);
+            } else if (key === 'year') {
+              query.andWhereRaw('YEAR(c.tglpengajuan) = ?', [value]);
             } else {
               query.andWhere(`c.${key}`, 'like', `%${value}%`);
             }
@@ -422,7 +424,7 @@ export class CutiService {
     const filterObj = rawFilters;
     const dataTempTglCuti = await this.tempTglCuti(
       [String(rawFilters?.karyawan_id)],
-      dbMssql,
+      trx,
     );
     const query = trx(`${this.tableName} as c`)
       .select([
@@ -790,50 +792,6 @@ export class CutiService {
       if (!karyawan_id) {
         throw new Error('karyawan_id is required');
       }
-      // const tempTableName = `cuti_approval_cache_${karyawan_id}`;
-
-      // if (isproses == 'false') {
-      // await trx.schema.dropTableIfExists(tempTableName);
-      // await trx.schema.createTable(tempTableName, (table) => {
-      //   table.integer('id'); // Auto-increment primary key
-      //   table.integer('karyawan_id').notNullable();
-      //   table.text('namakaryawan');
-      //   table.string('fotokaryawan');
-      //   table.string('namaalias');
-      //   table.text('tglcuti');
-      //   table.datetime('tglpengajuan');
-      //   table.string('statuscuti');
-      //   table.string('statuscuti_memo');
-      //   table.string('statuscuti_text');
-      //   table.integer('statuscutibatal');
-      //   table.string('statuscutibatal_memo');
-      //   table.string('nohp');
-      //   table.text('alasanpenolakan');
-      //   table.text('alasancuti');
-      //   table.integer('jumlahcuti');
-      //   table.integer('kategoricuti_id');
-      //   table.string('kategoricuti_memo');
-      //   table.string('statusnonhitung');
-      //   table.string('statusnonhitung_nama');
-      //   table.text('lampiran');
-      //   table.string('statusapprovalatasan');
-      //   table.string('tglapprovalatasan');
-      //   table.string('userapprovalatasan');
-      //   table.string('statusapprovalhrd');
-      //   table.string('tglapprovalhrd');
-      //   table.string('userapprovalhrd');
-      //   table.string('statusapproval_text');
-      //   table.string('statusapproval_memo');
-      //   table.integer('statusapproval');
-      //   table.text('info');
-      //   table.string('modifiedby');
-      //   table.integer('jenjangapproval');
-      //   table.datetime('created_at');
-      //   table.datetime('updated_at');
-      //   table.integer('jatahcuti');
-      //   table.integer('sisacuti');
-      //   table.integer('prediksicuti');
-      // });
 
       const tempApprovalCuti =
         '##tempApprovalCuti' + Math.random().toString(36).substring(2, 8);
@@ -919,6 +877,15 @@ export class CutiService {
           'c.created_at',
           'c.updated_at',
           trx.raw('COUNT(*) OVER() AS __total_items'),
+          trx.raw(
+            `
+          (SELECT cd.id, cd.tglcuti, cd.periodecutidari, cd.periodecutisampai, cd.info, cd.modifiedby,
+            FORMAT(cd.created_at, 'dd-MM-yyyy HH:mm:ss') as created_at, FORMAT(cd.updated_at, 'dd-MM-yyyy HH:mm:ss') as updated_at
+          FROM cutidetail as cd
+          WHERE cd.cuti_id = c.id
+          FOR JSON PATH) as detail
+        `,
+          ),
           // <-- Tambah di sini:
 
           // kalau perlu, uncomment nanti:
@@ -926,6 +893,7 @@ export class CutiService {
           // trx.raw(`ISNULL(tc.sisacuti, 0) AS sisacuti`),
           // trx.raw(`ISNULL(tc.prediksicuti, 0) AS prediksicuti`),
         ])
+
         .leftJoin('karyawan as k', 'c.karyawan_id', 'k.id')
         .leftJoin('parameter as p', 'c.statuscuti', 'p.id')
         .leftJoin('parameter as b', 'c.statuscutibatal', 'b.id')

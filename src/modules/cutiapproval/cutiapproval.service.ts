@@ -175,6 +175,7 @@ export class CutiapprovalService {
       if (updated && jenjangapproval >= totalApprovals) {
         // Ensure periodetgldari and periodetglsampai are in 'YYYY-MM-DD' format
         if (!statusnonhitung) {
+          await trx.rollback();
           throw new HttpException(
             {
               statusCode: HttpStatus.BAD_REQUEST,

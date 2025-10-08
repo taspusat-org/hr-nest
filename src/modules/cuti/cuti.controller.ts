@@ -322,6 +322,7 @@ export class CutiController {
       .select('id'); // Ambil semua cuti_id yang terkait dengan karyawan_id tersebut
 
     if (cutiList.length > 0) {
+      await trx.rollback();
       throw new HttpException(
         {
           statusCode: HttpStatus.BAD_REQUEST,
@@ -367,6 +368,7 @@ export class CutiController {
         const year = dateObj.getFullYear();
         return `${day}-${month}-${year}`;
       });
+      await trx.rollback();
       throw new HttpException(
         {
           statusCode: HttpStatus.BAD_REQUEST,
@@ -390,6 +392,7 @@ export class CutiController {
       const diffDays = diffTime / (1000 * 3600 * 24); // Menghitung selisih hari
 
       if (diffDays > (Number(batasCuti[0]?.text) || 7)) {
+        await trx.rollback();
         throw new HttpException(
           {
             statusCode: HttpStatus.BAD_REQUEST,
@@ -462,55 +465,91 @@ export class CutiController {
   @UseGuards(AuthGuard)
   @Post('check-cuti')
   async checkAddCuti(@Body() data: any) {
-    const trx = await dbMssql.transaction();
+    let trx: any; // Tipe Knex.Transaction, sesuaikan jika pakai @types/knex
 
     try {
-      // Mengecek apakah data cuti dan approval sudah ada
+      trx = await dbMssql.transaction(); // Mulai transaksi
+
+      // Mengecek apakah data cuti dengan status pending (150) sudah ada
       const existing = await trx('cuti')
         .where('karyawan_id', data.karyawan_id)
         .andWhere('statuscuti', 150)
         .first();
 
       if (existing) {
-        return {
-          statusCode: HttpStatus.NOT_FOUND,
-          message:
-            'TIDAK BISA MENGAJUKAN CUTI, MASIH ADA CUTI YANG BELUM DI APPROVE',
-        };
+        // Case error bisnis: Rollback dulu, baru throw
+        await trx.rollback();
+        throw new HttpException(
+          {
+            statusCode: HttpStatus.BAD_REQUEST,
+            message:
+              'TIDAK BISA MENGAJUKAN CUTI, MASIH ADA CUTI YANG BELUM DI APPROVE',
+          },
+          HttpStatus.BAD_REQUEST,
+        );
       }
 
-      // Menangani kondisi jika status sudah di-setujui, ditolak, atau dibatalkan
+      // Menangani kondisi jika status sudah di-approve, ditolak, atau dibatalkan
+      // Contoh: Tambahkan logika lain jika diperlukan, misalnya query tambahan
+      // await trx('approval_cuti').where(...).update(...);
 
+      // Commit transaksi jika sukses
       await trx.commit();
 
+      // Return response sukses (tidak throw, karena ini valid)
       return {
         statusCode: HttpStatus.OK,
         message: 'Cuti dapat diproses',
-      }; // Bisa sesuaikan dengan response yang diinginkan
-    } catch (error) {
-      // Rollback transaksi jika terjadi error
-      await trx.rollback();
-      return {
-        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-        message: 'Terjadi kesalahan pada server',
+        // Bisa tambah data lain jika perlu, misalnya: data: { ... }
       };
+    } catch (error) {
+      // Rollback untuk error tak terduga (misalnya query gagal, koneksi error)
+      if (trx && !trx.isCompleted()) {
+        await trx.rollback();
+      }
+
+      // Throw HttpException untuk response error (NestJS akan handle)
+      if (error instanceof HttpException) {
+        throw error; // Re-throw 400 asli
+      }
+    } finally {
+      // Opsional: Pastikan transaksi selalu dibersihkan (keamanan ekstra)
+      // Ini mencegah hanging transaction jika ada edge case di catch
+      if (trx && !trx.isCompleted()) {
+        await trx.rollback();
+      }
     }
   }
 
   @UseGuards(AuthGuard)
   @Post('check-approval')
   async checkApproval(@Body() data: any) {
-    const trx = await dbMssql.transaction();
+    let trx: any; // Tipe Knex.Transaction, sesuaikan jika pakai @types/knex
 
     try {
-      // Mengecek apakah data cuti dan approval sudah ada
+      trx = await dbMssql.transaction(); // Mulai transaksi
+
+      // Mengecek apakah data approval sudah ada
       const existing = await trx('cutiapproval')
         .select('statusapproval', 'jenjangapproval')
         .where('cuti_id', data.id)
         .andWhere('karyawan_id', data.karyawan_id)
         .first();
 
-      // Mengecek apakah ada approval dengan status 150 dan jenjangapproval lebih rendah
+      if (!existing) {
+        // Case error: Data tidak ditemukan
+        await trx.rollback();
+        throw new HttpException(
+          {
+            statusCode: HttpStatus.BAD_REQUEST,
+            message: 'Data approval tidak ditemukan',
+          },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      // Mengecek apakah ada approval sebelumnya dengan status pending (150) dan jenjang lebih rendah
+      // (Hanya jalankan jika existing ada, untuk menghindari error akses null)
       const previousApproval = await trx('cutiapproval')
         .where('cuti_id', data.id)
         .andWhere('statusapproval', 150)
@@ -518,73 +557,98 @@ export class CutiController {
         .first();
 
       if (previousApproval) {
-        // Fetch employee name based on karyawan_id
-        const employee = await trx('karyawan') // Assuming there's an employees table
-          .select('namakaryawan') // Fetching employee's name
-          .where('id', previousApproval.karyawan_id) // Use previousApproval.karyawan_id
+        // Fetch nama karyawan berdasarkan karyawan_id dari previousApproval
+        const employee = await trx('karyawan')
+          .select('namakaryawan')
+          .where('id', previousApproval.karyawan_id)
           .first();
 
-        // If employee exists, include the name in the message
-        const message = `Tidak dapat menyetujui cuti, karena belum dikonfirmasi oleh: ${employee.namakaryawan}`;
+        // Case error: Belum dikonfirmasi oleh atasan sebelumnya
+        await trx.rollback();
+        const message = employee
+          ? `Tidak dapat menyetujui cuti, karena belum dikonfirmasi oleh: ${employee.namakaryawan}`
+          : 'Tidak dapat menyetujui cuti, karena belum dikonfirmasi oleh atasan sebelumnya'; // Fallback jika employee null
 
-        return {
-          statusCode: HttpStatus.NOT_FOUND,
-          message: message,
-        };
+        throw new HttpException(
+          {
+            statusCode: HttpStatus.BAD_REQUEST,
+            message: message,
+          },
+          HttpStatus.BAD_REQUEST,
+        );
       }
 
-      if (!existing) {
-        return {
-          statusCode: HttpStatus.NOT_FOUND,
-          message: 'Data approval tidak ditemukan',
-        };
-      }
-
-      // Menangani kondisi jika status sudah di-setujui, ditolak, atau dibatalkan
+      // Menangani kondisi jika status sudah di-approve, ditolak, atau dibatalkan
       switch (existing.statusapproval) {
-        case 151:
-          return {
-            statusCode: HttpStatus.BAD_REQUEST,
-            message: 'CUTI SUDAH DI APPROVE',
-          };
-        case 152:
-          return {
-            statusCode: HttpStatus.BAD_REQUEST,
-            message: 'CUTI SUDAH DI TOLAK',
-          };
-        case 153:
-          return {
-            statusCode: HttpStatus.BAD_REQUEST,
-            message: 'CUTI SUDAH DI BATALKAN',
-          };
+        case 151: // Approved
+          await trx.rollback();
+          throw new HttpException(
+            {
+              statusCode: HttpStatus.BAD_REQUEST,
+              message: 'CUTI SUDAH DI APPROVE',
+            },
+            HttpStatus.BAD_REQUEST,
+          );
+        case 152: // Rejected
+          await trx.rollback();
+          throw new HttpException(
+            {
+              statusCode: HttpStatus.BAD_REQUEST,
+              message: 'CUTI SUDAH DI TOLAK',
+            },
+            HttpStatus.BAD_REQUEST,
+          );
+        case 153: // Cancelled
+          await trx.rollback();
+          throw new HttpException(
+            {
+              statusCode: HttpStatus.BAD_REQUEST,
+              message: 'CUTI SUDAH DI BATALKAN',
+            },
+            HttpStatus.BAD_REQUEST,
+          );
         default:
-          // Jika status tidak memenuhi syarat di atas, lanjutkan proses
+          // Jika status tidak memenuhi syarat di atas (misalnya 150: pending), lanjutkan proses
           break;
       }
 
+      // Commit transaksi jika sukses (semua validasi lolos)
       await trx.commit();
 
+      // Return response sukses (tidak throw, karena ini valid)
       return {
         statusCode: HttpStatus.OK,
         message: 'Cuti dapat diproses',
-      }; // Bisa sesuaikan dengan response yang diinginkan
-    } catch (error) {
-      // Rollback transaksi jika terjadi error
-      await trx.rollback();
-      return {
-        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-        message: 'Terjadi kesalahan pada server',
+        // Bisa tambah data lain jika perlu, misalnya: data: existing
       };
+    } catch (error) {
+      // Rollback untuk error tak terduga (misalnya query gagal, koneksi error)
+      if (trx && !trx.isCompleted()) {
+        await trx.rollback();
+      }
+
+      // Throw HttpException untuk response error (NestJS akan handle)
+      if (error instanceof HttpException) {
+        throw error; // Re-throw 400 asli
+      }
+    } finally {
+      // Opsional: Pastikan transaksi selalu dibersihkan (keamanan ekstra)
+      // Ini mencegah hanging transaction jika ada edge case di catch
+      if (trx && !trx.isCompleted()) {
+        await trx.rollback();
+      }
     }
   }
 
   @UseGuards(AuthGuard)
   @Post('check-reject')
   async checkReject(@Body() data: any) {
-    const trx = await dbMssql.transaction();
+    let trx: any; // Tipe Knex.Transaction, sesuaikan jika pakai @types/knex
 
     try {
-      // Mengecek apakah data cuti dan approval sudah ada
+      trx = await dbMssql.transaction(); // Mulai transaksi
+
+      // Mengecek apakah data approval sudah ada
       const existing = await trx('cutiapproval')
         .select('statusapproval')
         .where('cuti_id', data.id)
@@ -592,154 +656,242 @@ export class CutiController {
         .first();
 
       if (!existing) {
-        return {
-          statusCode: HttpStatus.NOT_FOUND,
-          message: 'Data approval tidak ditemukan',
-        };
+        // Case error: Data tidak ditemukan
+        await trx.rollback();
+        throw new HttpException(
+          {
+            statusCode: HttpStatus.BAD_REQUEST,
+            message: 'Data approval tidak ditemukan',
+          },
+          HttpStatus.BAD_REQUEST,
+        );
       }
 
-      // Menangani kondisi jika status sudah di-setujui, ditolak, atau dibatalkan
+      // Menangani kondisi jika status sudah di-approve, ditolak, atau dibatalkan
       switch (existing.statusapproval) {
-        case 151:
-          return {
-            statusCode: HttpStatus.BAD_REQUEST,
-            message: 'CUTI SUDAH DI APPROVE',
-          };
-        case 152:
-          return {
-            statusCode: HttpStatus.BAD_REQUEST,
-            message: 'CUTI SUDAH DI TOLAK',
-          };
-        case 153:
-          return {
-            statusCode: HttpStatus.BAD_REQUEST,
-            message: 'CUTI SUDAH DI BATALKAN',
-          };
+        case 151: // Approved
+          await trx.rollback();
+          throw new HttpException(
+            {
+              statusCode: HttpStatus.BAD_REQUEST,
+              message: 'CUTI SUDAH DI APPROVE',
+            },
+            HttpStatus.BAD_REQUEST,
+          );
+        case 152: // Rejected
+          await trx.rollback();
+          throw new HttpException(
+            {
+              statusCode: HttpStatus.BAD_REQUEST,
+              message: 'CUTI SUDAH DI TOLAK',
+            },
+            HttpStatus.BAD_REQUEST,
+          );
+        case 153: // Cancelled
+          await trx.rollback();
+          throw new HttpException(
+            {
+              statusCode: HttpStatus.BAD_REQUEST,
+              message: 'CUTI SUDAH DI BATALKAN',
+            },
+            HttpStatus.BAD_REQUEST,
+          );
         default:
-          // Jika status tidak memenuhi syarat di atas, lanjutkan proses
+          // Jika status tidak memenuhi syarat di atas (misalnya 150: pending), lanjutkan proses reject
           break;
       }
+
+      // Commit transaksi jika sukses (semua validasi lolos)
       await trx.commit();
 
+      // Return response sukses (tidak throw, karena ini valid)
       return {
         statusCode: HttpStatus.OK,
         message: 'Cuti dapat diproses',
-      }; // Bisa sesuaikan dengan response yang diinginkan
-    } catch (error) {
-      // Rollback transaksi jika terjadi error
-      await trx.rollback();
-      return {
-        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-        message: 'Terjadi kesalahan pada server',
+        // Bisa tambah data lain jika perlu, misalnya: data: existing
       };
+    } catch (error) {
+      console.log(error);
+      // Throw HttpException untuk response error (NestJS akan handle)
+      if (error instanceof HttpException) {
+        throw error; // Re-throw 400 asli
+      }
+    } finally {
+      // Opsional: Pastikan transaksi selalu dibersihkan (keamanan ekstra)
+      // Ini mencegah hanging transaction jika ada edge case di catch
+      if (trx && !trx.isCompleted()) {
+        await trx.rollback();
+      }
     }
   }
   @UseGuards(AuthGuard)
   @Post('check-cancel')
   async checkCancel(@Body() data: any) {
-    const trx = await dbMssql.transaction();
+    let trx: any; // Tipe Knex.Transaction, sesuaikan jika pakai @types/knex
 
     try {
-      // Mengecek apakah data cuti dan approval sudah ada
+      trx = await dbMssql.transaction(); // Mulai transaksi
+
+      // Mengecek apakah data approval sudah ada berdasarkan cuti_id
       const existing = await trx('cutiapproval')
         .select('statusapproval')
         .where('cuti_id', data.id)
-        // .andWhere('karyawan_id', data.karyawan_id)
+        // .andWhere('karyawan_id', data.karyawan_id) // Dikomentari sesuai asli; uncomment jika diperlukan
         .first();
 
       if (!existing) {
-        return {
-          statusCode: HttpStatus.NOT_FOUND,
-          message: 'Data approval tidak ditemukan',
-        };
+        // Case error: Data tidak ditemukan
+        await trx.rollback();
+        throw new HttpException(
+          {
+            statusCode: HttpStatus.BAD_REQUEST,
+            message: 'Data approval tidak ditemukan',
+          },
+          HttpStatus.BAD_REQUEST,
+        );
       }
 
-      // Menangani kondisi jika status sudah di-setujui, ditolak, atau dibatalkan
+      // Menangani kondisi jika status sudah di-tolak atau dibatalkan
       switch (existing.statusapproval) {
-        case 152:
-          return {
-            statusCode: HttpStatus.BAD_REQUEST,
-            message: 'CUTI SUDAH DI TOLAK',
-          };
-        case 153:
-          return {
-            statusCode: HttpStatus.BAD_REQUEST,
-            message: 'CUTI SUDAH DI BATALKAN',
-          };
+        case 152: // Rejected
+          await trx.rollback();
+          throw new HttpException(
+            {
+              statusCode: HttpStatus.BAD_REQUEST,
+              message: 'CUTI SUDAH DI TOLAK',
+            },
+            HttpStatus.BAD_REQUEST,
+          );
+        case 153: // Cancelled
+          await trx.rollback();
+          throw new HttpException(
+            {
+              statusCode: HttpStatus.BAD_REQUEST,
+              message: 'CUTI SUDAH DI BATALKAN',
+            },
+            HttpStatus.BAD_REQUEST,
+          );
         default:
-          // Jika status tidak memenuhi syarat di atas, lanjutkan proses
+          // Jika status tidak memenuhi syarat di atas (misalnya 150: pending atau 151: approved), lanjutkan proses cancel
           break;
       }
+
+      // Commit transaksi jika sukses (semua validasi lolos)
       await trx.commit();
 
+      // Return response sukses (tidak throw, karena ini valid)
       return {
         statusCode: HttpStatus.OK,
         message: 'Cuti dapat diproses',
-      }; // Bisa sesuaikan dengan response yang diinginkan
-    } catch (error) {
-      // Rollback transaksi jika terjadi error
-      await trx.rollback();
-      return {
-        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-        message: 'Terjadi kesalahan pada server',
+        // Bisa tambah data lain jika perlu, misalnya: data: existing
       };
+    } catch (error) {
+      // Rollback untuk error tak terduga (misalnya query gagal, koneksi error)
+      if (trx && !trx.isCompleted()) {
+        await trx.rollback();
+      }
+
+      // Throw HttpException untuk response error (NestJS akan handle)
+      if (error instanceof HttpException) {
+        throw error; // Re-throw 400 asli
+      }
+    } finally {
+      // Opsional: Pastikan transaksi selalu dibersihkan (keamanan ekstra)
+      // Ini mencegah hanging transaction jika ada edge case di catch
+      if (trx && !trx.isCompleted()) {
+        await trx.rollback();
+      }
     }
   }
   @UseGuards(AuthGuard)
   @Post('check-cancel-karyawan')
   async checkCancelCutiKaryawan(@Body() data: any) {
-    const trx = await dbMssql.transaction();
+    let trx: any; // Tipe Knex.Transaction, sesuaikan jika pakai @types/knex
 
     try {
-      // Mengecek apakah data cuti dan approval sudah ada
+      trx = await dbMssql.transaction(); // Mulai transaksi
+
+      // Mengecek apakah data cuti sudah ada berdasarkan cuti_id (untuk karyawan)
       const existing = await trx('cuti')
         .select('statuscuti')
         .where('id', data.id)
-        // .andWhere('karyawan_id', data.karyawan_id)
+        // .andWhere('karyawan_id', data.karyawan_id) // Dikomentari sesuai asli; uncomment jika diperlukan untuk validasi ownership
         .first();
 
       if (!existing) {
-        return {
-          statusCode: HttpStatus.NOT_FOUND,
-          message: 'Data approval tidak ditemukan',
-        };
+        // Case error: Data tidak ditemukan
+        await trx.rollback();
+        throw new HttpException(
+          {
+            statusCode: HttpStatus.BAD_REQUEST,
+            message: 'Data cuti tidak ditemukan',
+          },
+          HttpStatus.BAD_REQUEST,
+        );
       }
 
-      // Menangani kondisi jika status sudah di-setujui, ditolak, atau dibatalkan
-      switch (existing.statusapproval) {
-        case 151:
-          return {
-            statusCode: HttpStatus.BAD_REQUEST,
-            message:
-              'CUTI SUDAH DI APPROVE, MINTA ATASAN ANDA UNTUK MEMBATALKAN',
-          };
-        case 152:
-          return {
-            statusCode: HttpStatus.BAD_REQUEST,
-            message: 'CUTI SUDAH DI TOLAK',
-          };
-        case 153:
-          return {
-            statusCode: HttpStatus.BAD_REQUEST,
-            message: 'CUTI SUDAH DI BATALKAN',
-          };
+      // Menangani kondisi jika status sudah di-approve, ditolak, atau dibatalkan
+      switch (
+        existing.statuscuti // Diperbaiki: Gunakan 'statuscuti' sesuai field yang di-select
+      ) {
+        case 151: // Approved
+          await trx.rollback();
+          throw new HttpException(
+            {
+              statusCode: HttpStatus.BAD_REQUEST,
+              message:
+                'CUTI SUDAH DI APPROVE, MINTA ATASAN ANDA UNTUK MEMBATALKAN',
+            },
+            HttpStatus.BAD_REQUEST,
+          );
+        case 152: // Rejected
+          await trx.rollback();
+          throw new HttpException(
+            {
+              statusCode: HttpStatus.BAD_REQUEST,
+              message: 'CUTI SUDAH DI TOLAK',
+            },
+            HttpStatus.BAD_REQUEST,
+          );
+        case 153: // Cancelled
+          await trx.rollback();
+          throw new HttpException(
+            {
+              statusCode: HttpStatus.BAD_REQUEST,
+              message: 'CUTI SUDAH DI BATALKAN',
+            },
+            HttpStatus.BAD_REQUEST,
+          );
         default:
-          // Jika status tidak memenuhi syarat di atas, lanjutkan proses
+          // Jika status tidak memenuhi syarat di atas (misalnya 150: pending), lanjutkan proses cancel oleh karyawan
           break;
       }
+
+      // Commit transaksi jika sukses (semua validasi lolos)
       await trx.commit();
 
+      // Return response sukses (tidak throw, karena ini valid)
       return {
         statusCode: HttpStatus.OK,
         message: 'Cuti dapat diproses',
-      }; // Bisa sesuaikan dengan response yang diinginkan
-    } catch (error) {
-      // Rollback transaksi jika terjadi error
-      await trx.rollback();
-      return {
-        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-        message: 'Terjadi kesalahan pada server',
+        // Bisa tambah data lain jika perlu, misalnya: data: existing
       };
+    } catch (error) {
+      // Rollback untuk error tak terduga (misalnya query gagal, koneksi error)
+      if (trx && !trx.isCompleted()) {
+        await trx.rollback();
+      }
+
+      // Throw HttpException untuk response error (NestJS akan handle)
+      if (error instanceof HttpException) {
+        throw error; // Re-throw 400 asli
+      }
+    } finally {
+      // Opsional: Pastikan transaksi selalu dibersihkan (keamanan ekstra)
+      // Ini mencegah hanging transaction jika ada edge case di catch
+      if (trx && !trx.isCompleted()) {
+        await trx.rollback();
+      }
     }
   }
   // Endpoint untuk memperbarui data cuti
@@ -762,6 +914,7 @@ export class CutiController {
       .first();
 
     if (!existing) {
+      await trx.rollback();
       throw new HttpException(
         {
           statusCode: HttpStatus.NOT_FOUND,
@@ -773,6 +926,7 @@ export class CutiController {
 
     // Menangani status approval
     if (existing.statusapproval === 1) {
+      await trx.rollback();
       throw new HttpException(
         {
           statusCode: HttpStatus.BAD_REQUEST,
@@ -782,6 +936,7 @@ export class CutiController {
       );
     }
     if (existing.statusapproval === 2) {
+      await trx.rollback();
       throw new HttpException(
         {
           statusCode: HttpStatus.BAD_REQUEST,
@@ -791,6 +946,7 @@ export class CutiController {
       );
     }
     if (existing.statusapproval === 3) {
+      await trx.rollback();
       throw new HttpException(
         {
           statusCode: HttpStatus.BAD_REQUEST,
@@ -1061,11 +1217,12 @@ export class CutiController {
   @Put('cancel-cuti/:id')
   async updateStatusApproval(@Param('id') cutiId: number) {
     const trx = await dbMssql.transaction();
-    const existing = await dbMssql('cutiapproval')
+    const existing = await trx('cutiapproval')
       .select('statusapproval')
       .where('cuti_id', cutiId)
       .first();
     if (existing?.statusapproval === 1) {
+      await trx.rollback();
       throw new HttpException(
         {
           statusCode: HttpStatus.BAD_REQUEST,
@@ -1075,6 +1232,7 @@ export class CutiController {
       );
     }
     if (existing?.statusapproval === 2) {
+      await trx.rollback();
       throw new HttpException(
         {
           statusCode: HttpStatus.BAD_REQUEST,
@@ -1084,6 +1242,7 @@ export class CutiController {
       );
     }
     if (existing?.statusapproval === 3) {
+      await trx.rollback();
       throw new HttpException(
         {
           statusCode: HttpStatus.BAD_REQUEST,

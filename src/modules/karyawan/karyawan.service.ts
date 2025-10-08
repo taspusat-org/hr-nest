@@ -411,9 +411,9 @@ export class KaryawanService {
         .select('A.id', 'B.tglcuti', 'A.created_at as tglpengajuan')
         .from('cuti AS A')
         .innerJoin('cutidetail AS B', 'A.id', 'B.cuti_id')
+        .where('A.karyawan_id', '=', trx.raw('?', id)) // Gunakan whereIn untuk filter berdasarkan array karyawanIds
         .andWhereRaw('(ISNULL(A.statuscutibatal, 0)) <> 153')
         .andWhereRaw('(ISNULL(A.statuscuti, 0)) NOT IN (153,152)')
-        .andWhere('A.karyawan_id', '=', trx.raw('?', id)) // Gunakan whereIn untuk filter berdasarkan array karyawanIds
         .orderBy('A.id'),
     );
     const minusCuti = await trx(`karyawan as a`)
@@ -446,6 +446,7 @@ export class KaryawanService {
         .andWhereRaw('(ISNULL(D.statuscuti, 0)) NOT IN (153,152)')
         .groupBy('A.karyawan_id', 'A.periodetgldari', 'A.periodetglsampai'),
     );
+
     if (minusCuti.minuscuti == 164) {
       await trx(tempMinusCutiTable).delete().whereRaw('minuscuti > 0');
       await trx(tempMinusCutiTable2).insert(
@@ -1720,7 +1721,6 @@ export class KaryawanService {
             .andOn('a.karyawan_id', '=', 'b.karyawan_id');
         })
         .orderBy('a.karyawan_id')
-        .orderBy('a.typedata')
         .orderBy(
           trx.raw(
             '(CASE WHEN ISNULL(b.id, 0) = 0 THEN a.tglbukti2 ELSE b.tglpengajuan END),a.typedata',
@@ -1768,7 +1768,6 @@ export class KaryawanService {
               .andOn('a.karyawan_id', '=', 'b.karyawan_id');
           })
           .orderBy('a.karyawan_id')
-          .orderBy('a.typedata')
 
           .orderBy(
             trx.raw(
@@ -1828,7 +1827,6 @@ export class KaryawanService {
         .from(`${tempListData} AS a`)
         .innerJoin(`${tempKaryawanId} AS C`, 'A.karyawan_id', 'C.karyawan_id')
         .orderBy('a.karyawan_id')
-        .orderBy('a.typedata')
         .orderBy(
           trx.raw(
             '(CASE WHEN ISNULL(a.cuti_id, 0) = 0 THEN a.tglbukti2 ELSE a.tglpengajuan END),a.typedata',
@@ -2344,6 +2342,7 @@ export class KaryawanService {
           'k.cabang_id',
           'k.jabatan_id',
           'k.atasan_id',
+          'k.shift_id',
           'k.thr_id',
           'k.daftaremail_id',
           'k.approval_id',
@@ -2382,6 +2381,7 @@ export class KaryawanService {
           'shift.nama as shift_nama',
           'c.nama as cabang_nama',
           'j.nama as jabatan_nama',
+          dbMssql.raw('COUNT(*) OVER() AS __total_items'),
           dbMssql.raw(
             "COALESCE(atasan.namakaryawan, 'Tidak ada') as atasan_nama",
           ),
@@ -2566,11 +2566,9 @@ export class KaryawanService {
         }
       }
 
-      const result = await dbMssql(this.tableName).count('id as total').first();
-      const total = result?.total ? Number(result.total) : 0;
-      const totalPages = limit > 0 ? Math.ceil(total / limit) : 1;
-
       const data = await query;
+      const total = data.length ? Number(data[0].__total_items) : 0;
+      const totalPages = limit > 0 ? Math.ceil(total / limit) : 1;
 
       return {
         data,
@@ -3336,6 +3334,11 @@ export class KaryawanService {
       // 3. Gunakan filterObj di query nanti
       const filterObj = rawFilters;
 
+      if (insertData.email) {
+        await trx('users')
+          .update({ email: insertData.email })
+          .where('karyawan_id', id);
+      }
       const hasChanges = this.utilsService.hasChanges(insertData, existingData);
 
       if (hasChanges) {

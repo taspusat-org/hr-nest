@@ -431,16 +431,18 @@ export async function isRecordExist(
   value: string,
   table: string,
   excludeId?: number,
+  trx?: any,
 ): Promise<boolean> {
-  const existingRecordQuery = dbMssql(table) // Ganti dengan query builder yang Anda pakai, misalnya knex.js
-    .select('*')
-    .where(column, value); // Cek jika ada username dengan value yang diberikan
+  const existingRecordQuery = trx
+    ? trx(table).select('*').where(column, value)
+    : dbMssql(table) // Ganti dengan query builder yang Anda pakai, misalnya knex.js
+        .select('*')
+        .where(column, value); // Cek jika ada username dengan value yang diberikan
 
-  // Jika ada excludeId, kita exclude pengecekan pada record dengan id tersebut
+  // // Jika ada excludeId, kita exclude pengecekan pada record dengan id tersebut
   if (excludeId) {
     existingRecordQuery.whereNot('id', excludeId);
   }
-
   const existingRecord = await existingRecordQuery.first(); // Mendapatkan satu data saja
   return existingRecord !== undefined; // Jika ada, return true
 }

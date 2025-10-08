@@ -39,143 +39,150 @@ export class IzinController {
 
   @UseGuards(AuthGuard)
   @Post()
-  //@IZIN
   async create(
     @Body(new ZodValidationPipe(CreateIzinSchema)) data: CreateIzinDto,
     @Req() req,
   ) {
     const trx = await dbMssql.transaction();
-
-    const hariLibur = await trx('harilibur')
-      .select('*')
-      .where({ cabang_id: req.user.cabang_id }); // Daftar hari libur
-    const izinList = await trx('izin')
-      .where('karyawan_id', data.karyawan_id)
-      .andWhere('statusizin', 150) // Status 0 means pending approval
-      .select('id as izin_id');
-
-    if (izinList.length > 0) {
-      throw new HttpException(
-        {
-          statusCode: HttpStatus.BAD_REQUEST,
-          message: 'Masih ada Izin yang belum di-approve',
-        },
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-
-    // Retrieve batasizin value from the 'parameter' table (expected to be a number of days, like 30)
-    const batasizin = await trx('parameter')
-      .select('text') // Assuming the 'text' field stores the number of days allowed for izin
-      .where({ grp: 'BATASIZIN' });
-
-    if (batasizin.length === 0) {
-      throw new HttpException(
-        {
-          statusCode: HttpStatus.BAD_REQUEST,
-          message: 'Batas izin tidak ditemukan.',
-        },
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-
-    const batasIzinValue = parseInt(batasizin[0].text, 10); // Parse the batasizin value as an integer (e.g., 30)
-
-    // Get today's date and calculate the date range based on batasIzinValue (both forward and backward)
-    const today = new Date();
-    const daysInMilliseconds = batasIzinValue * 24 * 60 * 60 * 1000; // Convert days to milliseconds
-
-    const oneMonthBefore = new Date(today.getTime() - daysInMilliseconds); // 'batasIzinValue' days before today
-    const oneMonthAfter = new Date(today.getTime() + daysInMilliseconds); // 'batasIzinValue' days after today
-
-    // Validate tglizin (convert DD-MM-YYYY format to Date)
-    if (!data.tglizin) {
-      throw new HttpException(
-        {
-          statusCode: HttpStatus.BAD_REQUEST,
-          message: 'Tanggal izin tidak valid.',
-        },
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-
-    const [day, month, year] = data.tglizin.split('-'); // Destructure the date (DD, MM, YYYY)
-    const tglizinDate = new Date(`${year}-${month}-${day}T00:00:00Z`); // Reformat to YYYY-MM-DD (ISO format)
-
-    if (tglizinDate < oneMonthBefore || tglizinDate > oneMonthAfter) {
-      throw new HttpException(
-        {
-          statusCode: HttpStatus.BAD_REQUEST,
-          message: `Tanggal izin harus berada dalam rentang ${batasIzinValue} hari ke depan atau belakang.`,
-        },
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-
-    // Validate if tglizin is a holiday
-    const isHoliday = hariLibur.some((libur) => {
-      const liburDate = new Date(libur.tgl); // Assuming the 'tanggal' field stores the holiday dat
-      // Extract only the date part (ignore the time) and compare
-      return (
-        liburDate.toISOString().split('T')[0] ===
-        tglizinDate.toISOString().split('T')[0]
-      );
-    });
-
-    if (isHoliday) {
-      throw new HttpException(
-        {
-          statusCode: HttpStatus.BAD_REQUEST,
-          message: 'TIDAK BOLEH MENGAJUKAN IZIN DI HARI LIBUR',
-        },
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-
-    // Validate if tglizin is a Sunday (Minggu)
-    const isSunday = tglizinDate.getDay() === 0; // 0 represents Sunday
-    if (isSunday) {
-      throw new HttpException(
-        {
-          statusCode: HttpStatus.BAD_REQUEST,
-          message: 'TIDAK BOLEH MENGAJUKAN IZIN DI HARI MINGGU',
-        },
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-    if (!data.tglizin || data.tglizin === '') {
-      data.tglizin = null;
-    } else if (typeof data.tglizin === 'string') {
-      // Misal data.tglizin = "25-06-2002"
-      const [day, month, year] = data.tglizin.split('-');
-      // Hasil = "2002-06-25"
-      data.tglizin = `${year}-${month}-${day}`;
-    }
-    // Check for unDISETUJUI izin for the same karyawan_id
-    // Check if there's already an izin with the same tglizin and statusizin 151
-    const existingIzin = await trx('izin')
-      .where('tglizin', data.tglizin) // Make sure tglizin is passed in the data
-      .andWhere('statusizin', 151)
-      .select('id as izin_id');
-
-    if (existingIzin.length > 0) {
-      throw new HttpException(
-        {
-          statusCode: HttpStatus.BAD_REQUEST,
-          message: 'Anda sudah pernah mengajukan izin pada tanggal ini',
-        },
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-
     try {
+      const rawCabang = req.user?.cabang_id;
+      const cabangIds = Array.isArray(rawCabang)
+        ? [...new Set(rawCabang.filter((v) => v != null))]
+        : rawCabang != null
+          ? [rawCabang]
+          : [];
+
+      // If cabangIds is empty, return immediately without querying.
+      if (cabangIds.length === 0) {
+        return [];
+      }
+
+      const hariLibur = await trx('harilibur')
+        .select('*')
+        .whereIn('cabang_id', cabangIds);
+
+      const izinList = await trx('izin')
+        .where('karyawan_id', data.karyawan_id)
+        .andWhere('statusizin', 150)
+        .select('id as izin_id');
+
+      if (izinList.length > 0) {
+        await trx.rollback();
+        throw new HttpException(
+          {
+            statusCode: HttpStatus.BAD_REQUEST,
+            message: 'Masih ada Izin yang belum di-approve',
+          },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      const batasizin = await trx('parameter')
+        .select('text')
+        .where({ grp: 'BATASIZIN' });
+
+      if (batasizin.length === 0) {
+        await trx.rollback();
+        throw new HttpException(
+          {
+            statusCode: HttpStatus.BAD_REQUEST,
+            message: 'Batas izin tidak ditemukan.',
+          },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      const batasIzinValue = parseInt(batasizin[0].text, 10);
+      const today = new Date();
+      const daysInMilliseconds = batasIzinValue * 24 * 60 * 60 * 1000;
+      const oneMonthBefore = new Date(today.getTime() - daysInMilliseconds);
+      const oneMonthAfter = new Date(today.getTime() + daysInMilliseconds);
+
+      if (!data.tglizin) {
+        await trx.rollback();
+        throw new HttpException(
+          {
+            statusCode: HttpStatus.BAD_REQUEST,
+            message: 'Tanggal izin tidak valid.',
+          },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      const [day, month, year] = data.tglizin.split('-');
+      const tglizinDate = new Date(`${year}-${month}-${day}T00:00:00Z`);
+
+      if (tglizinDate < oneMonthBefore || tglizinDate > oneMonthAfter) {
+        await trx.rollback();
+        throw new HttpException(
+          {
+            statusCode: HttpStatus.BAD_REQUEST,
+            message: `Tanggal izin harus berada dalam rentang ${batasIzinValue} hari ke depan atau belakang.`,
+          },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      // Check for holidays
+      const isHoliday = hariLibur.some((libur) => {
+        const liburDate = new Date(libur.tgl);
+        return (
+          liburDate.toISOString().split('T')[0] ===
+          tglizinDate.toISOString().split('T')[0]
+        );
+      });
+
+      if (isHoliday) {
+        await trx.rollback();
+        throw new HttpException(
+          {
+            statusCode: HttpStatus.BAD_REQUEST,
+            message: 'TIDAK BOLEH MENGAJUKAN IZIN DI HARI LIBUR',
+          },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      // Check for Sunday
+      const isSunday = tglizinDate.getDay() === 0;
+      if (isSunday) {
+        await trx.rollback();
+        throw new HttpException(
+          {
+            statusCode: HttpStatus.BAD_REQUEST,
+            message: 'TIDAK BOLEH MENGAJUKAN IZIN DI HARI MINGGU',
+          },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      const existingIzin = await trx('izin')
+        .select('id as izin_id')
+        .where('tglizin', data.tglizin)
+        .andWhere('statusizin', 151);
+
+      if (existingIzin.length > 0) {
+        await trx.rollback();
+        throw new HttpException(
+          {
+            statusCode: HttpStatus.BAD_REQUEST,
+            message: 'Anda sudah pernah mengajukan izin pada tanggal ini',
+          },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      // Proceed with inserting the new izin record
       const modifiedby = req.user?.user?.username || 'unknown';
       const result = await this.izinService.create(data, trx, modifiedby);
 
+      // Commit the transaction only after everything is successful
       await trx.commit();
       return result;
     } catch (error) {
+      // Rollback the transaction in case of an error
       await trx.rollback();
+      console.error('Error during izin creation:', error);
 
       if (error instanceof HttpException) {
         throw error;
@@ -188,6 +195,9 @@ export class IzinController {
         },
         HttpStatus.BAD_REQUEST,
       );
+    } finally {
+      // Ensure that transaction is closed properly after commit or rollback
+      await trx.destroy();
     }
   }
 
@@ -334,26 +344,25 @@ export class IzinController {
   @Post('check-izin')
   async checkAddIzin(@Body() data: any) {
     const trx = await dbMssql.transaction();
-
     try {
       // Mengecek apakah data cuti dan approval sudah ada
       const existing = await trx('izin')
         .where('karyawan_id', data.karyawan_id)
         .andWhere('statusizin', 150)
         .first();
-
       if (existing) {
-        return {
-          statusCode: HttpStatus.NOT_FOUND,
-          message:
-            'TIDAK BISA MENGAJUKAN izin, MASIH ADA izin YANG BELUM DI SETUJUI',
-        };
+        await trx.rollback();
+        throw new HttpException(
+          {
+            statusCode: HttpStatus.BAD_REQUEST,
+            message:
+              'TIDAK BISA MENGAJUKAN izin, MASIH ADA izin YANG BELUM DI SETUJUI',
+          },
+          HttpStatus.BAD_REQUEST,
+        );
       }
-
       // Menangani kondisi jika status sudah di-approve, ditolak, atau dibatalkan
-
       await trx.commit();
-
       return {
         statusCode: HttpStatus.OK,
         message: 'izin dapat diproses',
@@ -361,19 +370,24 @@ export class IzinController {
     } catch (error) {
       // Rollback transaksi jika terjadi error
       await trx.rollback();
-      return {
-        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-        message: 'Terjadi kesalahan pada server',
-      };
+      if (error instanceof HttpException) {
+        throw error; // Re-throw 400 asli
+      }
+    } finally {
+      // Opsional: Pastikan transaksi selalu dibersihkan (keamanan ekstra)
+      // Ini mencegah hanging transaction jika ada edge case di catch
+      if (trx && !trx.isCompleted()) {
+        await trx.rollback();
+      }
     }
   }
   @UseGuards(AuthGuard)
   @Post('check-approval')
   async checkApproval(@Body() data: any) {
-    const trx = await dbMssql.transaction();
+    const trx = await dbMssql.transaction(); // Mulai transaksi
 
     try {
-      // Mengecek apakah data cuti dan approval sudah ada
+      // Mengecek apakah data approval izin sudah ada
       const existing = await trx('izinapproval')
         .select('statusapproval', 'jenjangapproval')
         .where('izin_id', data.id)
@@ -381,57 +395,86 @@ export class IzinController {
         .first();
 
       if (!existing) {
-        return {
-          statusCode: HttpStatus.NOT_FOUND,
-          message: 'Data approval tidak ditemukan',
-        };
+        // Case error: Data tidak ditemukan
+        await trx.rollback(); // Diperbaiki: Rollback untuk error, bukan commit
+        throw new HttpException(
+          {
+            statusCode: HttpStatus.BAD_REQUEST,
+            message: 'Data approval tidak ditemukan',
+          },
+          HttpStatus.BAD_REQUEST,
+        );
       }
 
       // Menangani kondisi jika status sudah di-approve, ditolak, atau dibatalkan
       switch (existing.statusapproval) {
-        case 151:
-          return {
-            statusCode: HttpStatus.BAD_REQUEST,
-            message: 'IZIN SUDAH DI SETUJUI',
-          };
-        case 152:
-          return {
-            statusCode: HttpStatus.BAD_REQUEST,
-            message: 'IZIN SUDAH DI TOLAK',
-          };
-        case 153:
-          return {
-            statusCode: HttpStatus.BAD_REQUEST,
-            message: 'IZIN SUDAH DI BATALKAN',
-          };
+        case 151: // Approved
+          await trx.rollback();
+          throw new HttpException(
+            {
+              statusCode: HttpStatus.BAD_REQUEST,
+              message: 'IZIN SUDAH DI SETUJUI',
+            },
+            HttpStatus.BAD_REQUEST,
+          );
+        case 152: // Rejected
+          await trx.rollback();
+          throw new HttpException(
+            {
+              statusCode: HttpStatus.BAD_REQUEST,
+              message: 'IZIN SUDAH DI TOLAK',
+            },
+            HttpStatus.BAD_REQUEST,
+          );
+        case 153: // Cancelled
+          await trx.rollback();
+          throw new HttpException(
+            {
+              statusCode: HttpStatus.BAD_REQUEST,
+              message: 'IZIN SUDAH DI BATALKAN',
+            },
+            HttpStatus.BAD_REQUEST,
+          );
         default:
-          // Jika status tidak memenuhi syarat di atas, lanjutkan proses
+          // Jika status tidak memenuhi syarat di atas (misalnya 150: pending), lanjutkan proses approval
           break;
       }
 
+      // Commit transaksi jika sukses (semua validasi lolos)
       await trx.commit();
 
+      // Return response sukses (tidak throw, karena ini valid)
       return {
         statusCode: HttpStatus.OK,
         message: 'Izin dapat diproses',
-      }; // Bisa sesuaikan dengan response yang diinginkan
-    } catch (error) {
-      // Rollback transaksi jika terjadi error
-      await trx.rollback();
-      return {
-        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-        message: 'Terjadi kesalahan pada server',
+        // Bisa tambah data lain jika perlu, misalnya: data: existing
       };
+    } catch (error) {
+      // Rollback untuk error tak terduga (misalnya query gagal, koneksi error)
+      if (trx && !trx.isCompleted()) {
+        await trx.rollback();
+      }
+
+      // Throw HttpException untuk response error (NestJS akan handle)
+      if (error instanceof HttpException) {
+        throw error; // Re-throw 400 asli
+      }
+    } finally {
+      // Opsional: Pastikan transaksi selalu dibersihkan (keamanan ekstra)
+      // Ini mencegah hanging transaction jika ada edge case di catch
+      if (trx && !trx.isCompleted()) {
+        await trx.rollback();
+      }
     }
   }
 
   @UseGuards(AuthGuard)
   @Post('check-reject')
   async checkReject(@Body() data: any) {
-    const trx = await dbMssql.transaction();
+    const trx = await dbMssql.transaction(); // Tipe Knex.Transaction, sesuaikan jika pakai @types/knex
 
     try {
-      // Mengecek apakah data cuti dan approval sudah ada
+      // Mengecek apakah data approval izin sudah ada
       const existing = await trx('izinapproval')
         .select('statusapproval')
         .where('izin_id', data.id)
@@ -439,55 +482,85 @@ export class IzinController {
         .first();
 
       if (!existing) {
-        return {
-          statusCode: HttpStatus.NOT_FOUND,
-          message: 'Data approval tidak ditemukan',
-        };
+        // Case error: Data tidak ditemukan
+        await trx.rollback();
+        throw new HttpException(
+          {
+            statusCode: HttpStatus.BAD_REQUEST,
+            message: 'Data approval tidak ditemukan',
+          },
+          HttpStatus.BAD_REQUEST,
+        );
       }
 
       // Menangani kondisi jika status sudah di-approve, ditolak, atau dibatalkan
       switch (existing.statusapproval) {
-        case 151:
-          return {
-            statusCode: HttpStatus.BAD_REQUEST,
-            message: 'IZIN SUDAH DI SETUJUI',
-          };
-        case 152:
-          return {
-            statusCode: HttpStatus.BAD_REQUEST,
-            message: 'IZIN SUDAH DI TOLAK',
-          };
-        case 153:
-          return {
-            statusCode: HttpStatus.BAD_REQUEST,
-            message: 'IZIN SUDAH DI BATALKAN',
-          };
+        case 151: // Approved
+          await trx.rollback();
+          throw new HttpException(
+            {
+              statusCode: HttpStatus.BAD_REQUEST,
+              message: 'IZIN SUDAH DI SETUJUI',
+            },
+            HttpStatus.BAD_REQUEST,
+          );
+        case 152: // Rejected
+          await trx.rollback();
+          throw new HttpException(
+            {
+              statusCode: HttpStatus.BAD_REQUEST,
+              message: 'IZIN SUDAH DI TOLAK',
+            },
+            HttpStatus.BAD_REQUEST,
+          );
+        case 153: // Cancelled
+          await trx.rollback();
+          throw new HttpException(
+            {
+              statusCode: HttpStatus.BAD_REQUEST,
+              message: 'IZIN SUDAH DI BATALKAN',
+            },
+            HttpStatus.BAD_REQUEST,
+          );
         default:
-          // Jika status tidak memenuhi syarat di atas, lanjutkan proses
+          // Jika status tidak memenuhi syarat di atas (misalnya 150: pending), lanjutkan proses reject
           break;
       }
+
+      // Commit transaksi jika sukses (semua validasi lolos)
       await trx.commit();
 
+      // Return response sukses (tidak throw, karena ini valid)
       return {
         statusCode: HttpStatus.OK,
         message: 'Izin dapat diproses',
-      }; // Bisa sesuaikan dengan response yang diinginkan
-    } catch (error) {
-      // Rollback transaksi jika terjadi error
-      await trx.rollback();
-      return {
-        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-        message: 'Terjadi kesalahan pada server',
+        // Bisa tambah data lain jika perlu, misalnya: data: existing
       };
+    } catch (error) {
+      // Rollback untuk error tak terduga (misalnya query gagal, koneksi error)
+      if (trx && !trx.isCompleted()) {
+        await trx.rollback();
+      }
+
+      // Throw HttpException untuk response error (NestJS akan handle)
+      if (error instanceof HttpException) {
+        throw error; // Re-throw 400 asli
+      }
+    } finally {
+      // Opsional: Pastikan transaksi selalu dibersihkan (keamanan ekstra)
+      // Ini mencegah hanging transaction jika ada edge case di catch
+      if (trx && !trx.isCompleted()) {
+        await trx.rollback();
+      }
     }
   }
   @UseGuards(AuthGuard)
   @Post('check-cancel')
   async checkCancel(@Body() data: any) {
-    const trx = await dbMssql.transaction();
+    const trx = await dbMssql.transaction(); // Mulai transaksi
 
     try {
-      // Mengecek apakah data cuti dan approval sudah ada
+      // Mengecek apakah data approval izin sudah ada
       const existing = await trx('izinapproval')
         .select('statusapproval')
         .where('izin_id', data.id)
@@ -495,41 +568,67 @@ export class IzinController {
         .first();
 
       if (!existing) {
-        return {
-          statusCode: HttpStatus.NOT_FOUND,
-          message: 'Data approval tidak ditemukan',
-        };
+        // Case error: Data tidak ditemukan
+        await trx.rollback();
+        throw new HttpException(
+          {
+            statusCode: HttpStatus.BAD_REQUEST,
+            message: 'Data approval tidak ditemukan',
+          },
+          HttpStatus.BAD_REQUEST,
+        );
       }
 
-      // Menangani kondisi jika status sudah di-approve, ditolak, atau dibatalkan
+      // Menangani kondisi jika status sudah di-tolak atau dibatalkan
       switch (existing.statusapproval) {
-        case 152:
-          return {
-            statusCode: HttpStatus.BAD_REQUEST,
-            message: 'IZIN SUDAH DI TOLAK',
-          };
-        case 153:
-          return {
-            statusCode: HttpStatus.BAD_REQUEST,
-            message: 'IZIN SUDAH DI BATALKAN',
-          };
+        case 152: // Rejected
+          await trx.rollback();
+          throw new HttpException(
+            {
+              statusCode: HttpStatus.BAD_REQUEST,
+              message: 'IZIN SUDAH DI TOLAK',
+            },
+            HttpStatus.BAD_REQUEST,
+          );
+        case 153: // Cancelled
+          await trx.rollback();
+          throw new HttpException(
+            {
+              statusCode: HttpStatus.BAD_REQUEST,
+              message: 'IZIN SUDAH DI BATALKAN',
+            },
+            HttpStatus.BAD_REQUEST,
+          );
         default:
-          // Jika status tidak memenuhi syarat di atas, lanjutkan proses
+          // Jika status tidak memenuhi syarat di atas (misalnya 150: pending atau 151: approved), lanjutkan proses cancel
           break;
       }
+
+      // Commit transaksi jika sukses (semua validasi lolos)
       await trx.commit();
 
+      // Return response sukses (tidak throw, karena ini valid)
       return {
         statusCode: HttpStatus.OK,
         message: 'Izin dapat diproses',
-      }; // Bisa sesuaikan dengan response yang diinginkan
-    } catch (error) {
-      // Rollback transaksi jika terjadi error
-      await trx.rollback();
-      return {
-        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-        message: 'Terjadi kesalahan pada server',
+        // Bisa tambah data lain jika perlu, misalnya: data: existing
       };
+    } catch (error) {
+      // Rollback untuk error tak terduga (misalnya query gagal, koneksi error)
+      if (trx && !trx.isCompleted()) {
+        await trx.rollback();
+      }
+
+      // Throw HttpException untuk response error (NestJS akan handle)
+      if (error instanceof HttpException) {
+        throw error; // Re-throw 400 asli
+      }
+    } finally {
+      // Opsional: Pastikan transaksi selalu dibersihkan (keamanan ekstra)
+      // Ini mencegah hanging transaction jika ada edge case di catch
+      if (trx && !trx.isCompleted()) {
+        await trx.rollback();
+      }
     }
   }
   @UseGuards(AuthGuard)
@@ -549,6 +648,7 @@ export class IzinController {
       .where({ grp: 'BATASIZIN' });
 
     if (batasizin.length === 0) {
+      await trx.rollback();
       throw new HttpException(
         {
           statusCode: HttpStatus.BAD_REQUEST,
@@ -569,6 +669,7 @@ export class IzinController {
 
     // Check if tglizin is within the allowed range
     if (!data.tglizin) {
+      await trx.rollback();
       throw new HttpException(
         {
           statusCode: HttpStatus.BAD_REQUEST,
@@ -588,6 +689,7 @@ export class IzinController {
     // Convert the formatted string to a Date object
     const tglizinDate = new Date(formattedDateString + 'T00:00:00Z'); // Ensure it's i
     if (tglizinDate < oneMonthBefore || tglizinDate > oneMonthAfter) {
+      await trx.rollback();
       throw new HttpException(
         {
           statusCode: HttpStatus.BAD_REQUEST,
@@ -603,6 +705,7 @@ export class IzinController {
       .select('id');
 
     if (checkIzinDISETUJUI.length > 0) {
+      await trx.rollback();
       throw new HttpException(
         {
           statusCode: HttpStatus.BAD_REQUEST,
@@ -627,6 +730,7 @@ export class IzinController {
       .select('id as izin_id');
 
     if (existingIzin.length > 0) {
+      await trx.rollback();
       throw new HttpException(
         {
           statusCode: HttpStatus.BAD_REQUEST,

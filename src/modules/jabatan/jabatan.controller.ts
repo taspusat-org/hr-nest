@@ -134,9 +134,11 @@ export class JabatanController {
         data.nama,
         'jabatan',
         Number(id),
+        trx,
       );
 
       if (emailExists) {
+        await trx.rollback();
         throw new HttpException(
           {
             statusCode: HttpStatus.BAD_REQUEST,

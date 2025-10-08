@@ -15,25 +15,39 @@ import {
   dbsmgEmkl,
 } from 'src/common/utils/db';
 
+/**
+ * RabbitMQ Client Controller
+ *
+ * Controller ini menangani semua request dari RabbitMQ untuk operasi
+ * aktivasi dan deaktivasi akun karyawan di berbagai cabang.
+ *
+ * Semua method mengembalikan response dengan format yang konsisten:
+ * - Success: { status: 'success', message: '...' }
+ * - Error: { status: 'error', message: '...' }
+ *
+ * Format response ini memastikan controller utama dapat dengan mudah
+ * memvalidasi keberhasilan operasi dan melakukan rollback jika diperlukan.
+ */
 @Controller('rabbitmq-client')
 export class RabbitmqClientController {
   constructor(private readonly rabbitmqService: RabbitmqService) {}
 
-  @MessagePattern({ cmd: '26 RESIGN' }) // Pastikan '26' ini sesuai dengan yang dikirimkan
+  /**
+   * Nonaktifkan akun di database PUSAT
+   * Command: '26 RESIGN'
+   */
+  @MessagePattern({ cmd: '26 RESIGN' })
   async nonaktifAkunPusat(@Payload() payload: any) {
-    // Cek apakah kode cabang cocok
     if (payload.kodeCabang === '26 RESIGN') {
       try {
         const nonaktif = await this.nonaktifkanAkunDiPusat(payload.id);
 
-        // Jika nonaktif berhasil
         if (nonaktif) {
           return {
             status: 'success',
             message: 'Akun berhasil dinonaktifkan di PUSAT',
           };
         } else {
-          // Jika gagal menonaktifkan akun
           return {
             status: 'error',
             message: 'Gagal menonaktifkan akun di PUSAT',
@@ -48,28 +62,32 @@ export class RabbitmqClientController {
       }
     }
 
-    // Jika kode cabang tidak cocok
     return {
       status: 'error',
       message: 'Kode cabang tidak ditemukan atau tidak valid',
     };
   }
-  @MessagePattern({ cmd: '27 RESIGN' }) // Pastikan '27' ini sesuai dengan yang dikirimkan
+
+  /**
+   * Nonaktifkan akun di database EMKL Medan
+   * Command: '27 RESIGN'
+   */
+  @MessagePattern({ cmd: '27 RESIGN' })
   async nonaktifAkunEmklMedan(@Payload() payload: any) {
-    // Cek apakah kode cabang cocok
-    // if (payload.kodeCabang === '27') {
     if (payload.kodeCabang === '27 RESIGN') {
       try {
         const nonaktif = await this.nonaktifEmklMedan(payload.id);
-        // Jika nonaktif berhasil
+
         if (nonaktif) {
           return {
             status: 'success',
             message: 'Akun berhasil dinonaktifkan di cabang Medan',
           };
         } else {
-          // Jika gagal menonaktifkan akun
-          return false;
+          return {
+            status: 'error',
+            message: 'Gagal menonaktifkan akun di cabang Medan',
+          };
         }
       } catch (error) {
         console.error('Error menonaktifkan akun:', error);
@@ -80,465 +98,510 @@ export class RabbitmqClientController {
       }
     }
 
-    // Jika kode cabang tidak cocok
     return {
       status: 'error',
       message: 'Kode cabang tidak ditemukan atau tidak valid',
     };
   }
-  @MessagePattern({ cmd: '28 RESIGN' }) // Pastikan '27' ini sesuai dengan yang dikirimkan
+
+  /**
+   * Nonaktifkan akun di database EMKL Jakarta
+   * Command: '28 RESIGN'
+   */
+  @MessagePattern({ cmd: '28 RESIGN' })
   async nonaktifAkunEmklJkt(@Payload() payload: any) {
-    // Cek apakah kode cabang cocok
-    // if (payload.kodeCabang === '27') {
     if (payload.kodeCabang === '28 RESIGN') {
       try {
         const nonaktif = await this.nonaktifEmklJkt(payload.id);
-        // Jika nonaktif berhasil
+
         if (nonaktif) {
           return {
             status: 'success',
-            message: 'Akun berhasil dinonaktifkan di cabang Medan',
+            message: 'Akun berhasil dinonaktifkan di cabang Jakarta',
           };
         } else {
-          // Jika gagal menonaktifkan akun
-          return false;
+          return {
+            status: 'error',
+            message: 'Gagal menonaktifkan akun di cabang Jakarta',
+          };
         }
       } catch (error) {
         console.error('Error menonaktifkan akun:', error);
         return {
           status: 'error',
-          message: `Gagal menonaktifkan akun di cabang Medan: ${error.message}`,
+          message: `Gagal menonaktifkan akun di cabang Jakarta: ${error.message}`,
         };
       }
     }
 
-    // Jika kode cabang tidak cocok
     return {
       status: 'error',
       message: 'Kode cabang tidak ditemukan atau tidak valid',
     };
   }
 
-  @MessagePattern({ cmd: '29 RESIGN' }) // Pastikan '27' ini sesuai dengan yang dikirimkan
+  /**
+   * Nonaktifkan akun di database EMKL Surabaya
+   * Command: '29 RESIGN'
+   */
+  @MessagePattern({ cmd: '29 RESIGN' })
   async nonaktifAkunEmklSby(@Payload() payload: any) {
-    // Cek apakah kode cabang cocok
-    // if (payload.kodeCabang === '27') {
     if (payload.kodeCabang === '29 RESIGN') {
       try {
         const nonaktif = await this.nonaktifEmklSby(payload.id);
-        // Jika nonaktif berhasil
+
         if (nonaktif) {
           return {
             status: 'success',
-            message: 'Akun berhasil dinonaktifkan di cabang Medan',
+            message: 'Akun berhasil dinonaktifkan di cabang Surabaya',
           };
         } else {
-          // Jika gagal menonaktifkan akun
-          return false;
+          return {
+            status: 'error',
+            message: 'Gagal menonaktifkan akun di cabang Surabaya',
+          };
         }
       } catch (error) {
         console.error('Error menonaktifkan akun:', error);
         return {
           status: 'error',
-          message: `Gagal menonaktifkan akun di cabang Medan: ${error.message}`,
+          message: `Gagal menonaktifkan akun di cabang Surabaya: ${error.message}`,
         };
       }
     }
 
-    // Jika kode cabang tidak cocok
     return {
       status: 'error',
       message: 'Kode cabang tidak ditemukan atau tidak valid',
     };
   }
-  @MessagePattern({ cmd: '30 RESIGN' }) // Pastikan '27' ini sesuai dengan yang dikirimkan
+
+  /**
+   * Nonaktifkan akun di database EMKL Makassar
+   * Command: '30 RESIGN'
+   */
+  @MessagePattern({ cmd: '30 RESIGN' })
   async nonaktifAkunEmklMks(@Payload() payload: any) {
-    // Cek apakah kode cabang cocok
-    // if (payload.kodeCabang === '27') {
     if (payload.kodeCabang === '30 RESIGN') {
       try {
         const nonaktif = await this.nonaktifEmklMks(payload.id);
-        // Jika nonaktif berhasil
+
         if (nonaktif) {
           return {
             status: 'success',
-            message: 'Akun berhasil dinonaktifkan di cabang Medan',
+            message: 'Akun berhasil dinonaktifkan di cabang Makassar',
           };
         } else {
-          // Jika gagal menonaktifkan akun
-          return false;
+          return {
+            status: 'error',
+            message: 'Gagal menonaktifkan akun di cabang Makassar',
+          };
         }
       } catch (error) {
         console.error('Error menonaktifkan akun:', error);
         return {
           status: 'error',
-          message: `Gagal menonaktifkan akun di cabang Medan: ${error.message}`,
+          message: `Gagal menonaktifkan akun di cabang Makassar: ${error.message}`,
         };
       }
     }
 
-    // Jika kode cabang tidak cocok
     return {
       status: 'error',
       message: 'Kode cabang tidak ditemukan atau tidak valid',
     };
   }
-  @MessagePattern({ cmd: '31 RESIGN' }) // Pastikan '27' ini sesuai dengan yang dikirimkan
+
+  /**
+   * Nonaktifkan akun di database EMKL Bitung
+   * Command: '31 RESIGN'
+   */
+  @MessagePattern({ cmd: '31 RESIGN' })
   async nonaktifAkunEmklBtg(@Payload() payload: any) {
-    // Cek apakah kode cabang cocok
-    // if (payload.kodeCabang === '27') {
     if (payload.kodeCabang === '31 RESIGN') {
       try {
         const nonaktif = await this.nonaktifEmklBtg(payload.id);
-        // Jika nonaktif berhasil
+
         if (nonaktif) {
           return {
             status: 'success',
-            message: 'Akun berhasil dinonaktifkan di cabang Medan',
+            message: 'Akun berhasil dinonaktifkan di cabang Bitung',
           };
         } else {
-          // Jika gagal menonaktifkan akun
-          return false;
+          return {
+            status: 'error',
+            message: 'Gagal menonaktifkan akun di cabang Bitung',
+          };
         }
       } catch (error) {
         console.error('Error menonaktifkan akun:', error);
         return {
           status: 'error',
-          message: `Gagal menonaktifkan akun di cabang Medan: ${error.message}`,
+          message: `Gagal menonaktifkan akun di cabang Bitung: ${error.message}`,
         };
       }
     }
 
-    // Jika kode cabang tidak cocok
     return {
       status: 'error',
       message: 'Kode cabang tidak ditemukan atau tidak valid',
     };
   }
 
-  @MessagePattern({ cmd: '1135 RESIGN' }) // Pastikan '27' ini sesuai dengan yang dikirimkan
+  /**
+   * Nonaktifkan akun di database EMKL Semarang
+   * Command: '1135 RESIGN'
+   */
+  @MessagePattern({ cmd: '1135 RESIGN' })
   async nonaktifAkunEmklSmg(@Payload() payload: any) {
-    // Cek apakah kode cabang cocok
-    // if (payload.kodeCabang === '27') {
     if (payload.kodeCabang === '1135 RESIGN') {
       try {
-        const nonaktif = await this.nonaktifEmklBtg(payload.id);
-        // Jika nonaktif berhasil
+        const nonaktif = await this.nonaktifEmklSmg(payload.id);
+
         if (nonaktif) {
           return {
             status: 'success',
-            message: 'Akun berhasil dinonaktifkan di cabang Medan',
+            message: 'Akun berhasil dinonaktifkan di cabang Semarang',
           };
         } else {
-          // Jika gagal menonaktifkan akun
-          return false;
+          return {
+            status: 'error',
+            message: 'Gagal menonaktifkan akun di cabang Semarang',
+          };
         }
       } catch (error) {
         console.error('Error menonaktifkan akun:', error);
         return {
           status: 'error',
-          message: `Gagal menonaktifkan akun di cabang Medan: ${error.message}`,
+          message: `Gagal menonaktifkan akun di cabang Semarang: ${error.message}`,
         };
       }
     }
 
-    // Jika kode cabang tidak cocok
     return {
       status: 'error',
       message: 'Kode cabang tidak ditemukan atau tidak valid',
     };
   }
 
-  @MessagePattern({ cmd: '1136 RESIGN' }) // Pastikan '27' ini sesuai dengan yang dikirimkan
+  /**
+   * Nonaktifkan akun di database Trucking Medan
+   * Command: '1136 RESIGN'
+   */
+  @MessagePattern({ cmd: '1136 RESIGN' })
   async nonaktifAkunTruckMdn(@Payload() payload: any) {
-    // Cek apakah kode cabang cocok
-    // if (payload.kodeCabang === '27') {
     if (payload.kodeCabang === '1136 RESIGN') {
       try {
         const nonaktif = await this.nonaktifTruckingMedan(payload.id);
-        // Jika nonaktif berhasil
+
         if (nonaktif) {
           return {
             status: 'success',
-            message: 'Akun berhasil dinonaktifkan di cabang Medan',
+            message: 'Akun berhasil dinonaktifkan di cabang Trucking Medan',
           };
         } else {
-          // Jika gagal menonaktifkan akun
-          return false;
-        }
-      } catch (error) {
-        console.error('Error menonaktifkan akun:', error);
-        return {
-          status: 'error',
-          message: `Gagal menonaktifkan akun di cabang Medan: ${error.message}`,
-        };
-      }
-    }
-
-    // Jika kode cabang tidak cocok
-    return {
-      status: 'error',
-      message: 'Kode cabang tidak ditemukan atau tidak valid',
-    };
-  }
-
-  @MessagePattern({ cmd: '26' }) // Pastikan '26' ini sesuai dengan yang dikirimkan
-  async aktifAkunPusat(@Payload() payload: any) {
-    // Cek apakah kode cabang cocok
-    if (payload.kodeCabang === '26') {
-      try {
-        const nonaktif = await this.aktifkanAkunDiPusat(payload.id);
-
-        // Jika nonaktif berhasil
-        if (nonaktif) {
-          return {
-            status: 'success',
-            message: 'Akun berhasil dinonaktifkan di PUSAT',
-          };
-        } else {
-          // Jika gagal menonaktifkan akun
           return {
             status: 'error',
-            message: 'Gagal menonaktifkan akun di PUSAT',
+            message: 'Gagal menonaktifkan akun di cabang Trucking Medan',
           };
         }
       } catch (error) {
         console.error('Error menonaktifkan akun:', error);
         return {
           status: 'error',
-          message: `Gagal menonaktifkan akun di PUSAT: ${error.message}`,
+          message: `Gagal menonaktifkan akun di cabang Trucking Medan: ${error.message}`,
         };
       }
     }
 
-    // Jika kode cabang tidak cocok
     return {
       status: 'error',
       message: 'Kode cabang tidak ditemukan atau tidak valid',
     };
   }
-  @MessagePattern({ cmd: '27' }) // Pastikan '27' ini sesuai dengan yang dikirimkan
+
+  /**
+   * Aktifkan akun di database PUSAT
+   * Command: '26'
+   */
+  @MessagePattern({ cmd: '26' })
+  async aktifAkunPusat(@Payload() payload: any) {
+    if (payload.kodeCabang === '26') {
+      try {
+        const aktif = await this.aktifkanAkunDiPusat(payload.id);
+
+        if (aktif) {
+          return {
+            status: 'success',
+            message: 'Akun berhasil diaktifkan di PUSAT',
+          };
+        } else {
+          return {
+            status: 'error',
+            message: 'Gagal mengaktifkan akun di PUSAT',
+          };
+        }
+      } catch (error) {
+        console.error('Error mengaktifkan akun:', error);
+        return {
+          status: 'error',
+          message: `Gagal mengaktifkan akun di PUSAT: ${error.message}`,
+        };
+      }
+    }
+
+    return {
+      status: 'error',
+      message: 'Kode cabang tidak ditemukan atau tidak valid',
+    };
+  }
+
+  /**
+   * Aktifkan akun di database EMKL Medan
+   * Command: '27'
+   */
+  @MessagePattern({ cmd: '27' })
   async aktifAkunEmklMedan(@Payload() payload: any) {
-    // Cek apakah kode cabang cocok
-    // if (payload.kodeCabang === '27') {
     if (payload.kodeCabang === '27') {
       try {
-        const nonaktif = await this.aktifEmklMedan(payload.id);
-        // Jika nonaktif berhasil
-        if (nonaktif) {
+        const aktif = await this.aktifEmklMedan(payload.id);
+
+        if (aktif) {
           return {
             status: 'success',
-            message: 'Akun berhasil dinonaktifkan di cabang Medan',
+            message: 'Akun berhasil diaktifkan di cabang Medan',
           };
         } else {
-          // Jika gagal menonaktifkan akun
-          return false;
+          return {
+            status: 'error',
+            message: 'Gagal mengaktifkan akun di cabang Medan',
+          };
         }
       } catch (error) {
-        console.error('Error menonaktifkan akun:', error);
+        console.error('Error mengaktifkan akun:', error);
         return {
           status: 'error',
-          message: `Gagal menonaktifkan akun di cabang Medan: ${error.message}`,
+          message: `Gagal mengaktifkan akun di cabang Medan: ${error.message}`,
         };
       }
     }
 
-    // Jika kode cabang tidak cocok
     return {
       status: 'error',
       message: 'Kode cabang tidak ditemukan atau tidak valid',
     };
   }
-  @MessagePattern({ cmd: '28' }) // Pastikan '27' ini sesuai dengan yang dikirimkan
+
+  /**
+   * Aktifkan akun di database EMKL Jakarta
+   * Command: '28'
+   */
+  @MessagePattern({ cmd: '28' })
   async aktifAkunEmklJkt(@Payload() payload: any) {
-    // Cek apakah kode cabang cocok
-    // if (payload.kodeCabang === '27') {
     if (payload.kodeCabang === '28') {
       try {
-        const nonaktif = await this.aktifEmklJkt(payload.id);
-        // Jika nonaktif berhasil
-        if (nonaktif) {
+        const aktif = await this.aktifEmklJkt(payload.id);
+
+        if (aktif) {
           return {
             status: 'success',
-            message: 'Akun berhasil dinonaktifkan di cabang Medan',
+            message: 'Akun berhasil diaktifkan di cabang Jakarta',
           };
         } else {
-          // Jika gagal menonaktifkan akun
-          return false;
+          return {
+            status: 'error',
+            message: 'Gagal mengaktifkan akun di cabang Jakarta',
+          };
         }
       } catch (error) {
-        console.error('Error menonaktifkan akun:', error);
+        console.error('Error mengaktifkan akun:', error);
         return {
           status: 'error',
-          message: `Gagal menonaktifkan akun di cabang Medan: ${error.message}`,
+          message: `Gagal mengaktifkan akun di cabang Jakarta: ${error.message}`,
         };
       }
     }
 
-    // Jika kode cabang tidak cocok
     return {
       status: 'error',
       message: 'Kode cabang tidak ditemukan atau tidak valid',
     };
   }
 
-  @MessagePattern({ cmd: '29' }) // Pastikan '27' ini sesuai dengan yang dikirimkan
+  /**
+   * Aktifkan akun di database EMKL Surabaya
+   * Command: '29'
+   */
+  @MessagePattern({ cmd: '29' })
   async aktifAkunEmklSby(@Payload() payload: any) {
-    // Cek apakah kode cabang cocok
-    // if (payload.kodeCabang === '27') {
     if (payload.kodeCabang === '29') {
       try {
-        const nonaktif = await this.aktifEmklSby(payload.id);
-        // Jika nonaktif berhasil
-        if (nonaktif) {
+        const aktif = await this.aktifEmklSby(payload.id);
+
+        if (aktif) {
           return {
             status: 'success',
-            message: 'Akun berhasil dinonaktifkan di cabang Medan',
+            message: 'Akun berhasil diaktifkan di cabang Surabaya',
           };
         } else {
-          // Jika gagal menonaktifkan akun
-          return false;
+          return {
+            status: 'error',
+            message: 'Gagal mengaktifkan akun di cabang Surabaya',
+          };
         }
       } catch (error) {
-        console.error('Error menonaktifkan akun:', error);
+        console.error('Error mengaktifkan akun:', error);
         return {
           status: 'error',
-          message: `Gagal menonaktifkan akun di cabang Medan: ${error.message}`,
+          message: `Gagal mengaktifkan akun di cabang Surabaya: ${error.message}`,
         };
       }
     }
 
-    // Jika kode cabang tidak cocok
     return {
       status: 'error',
       message: 'Kode cabang tidak ditemukan atau tidak valid',
     };
   }
-  @MessagePattern({ cmd: '30' }) // Pastikan '27' ini sesuai dengan yang dikirimkan
+
+  /**
+   * Aktifkan akun di database EMKL Makassar
+   * Command: '30'
+   */
+  @MessagePattern({ cmd: '30' })
   async aktifAkunEmklMks(@Payload() payload: any) {
-    // Cek apakah kode cabang cocok
-    // if (payload.kodeCabang === '27') {
     if (payload.kodeCabang === '30') {
       try {
-        const nonaktif = await this.aktifEmklMks(payload.id);
-        // Jika nonaktif berhasil
-        if (nonaktif) {
+        const aktif = await this.aktifEmklMks(payload.id);
+
+        if (aktif) {
           return {
             status: 'success',
-            message: 'Akun berhasil dinonaktifkan di cabang Medan',
+            message: 'Akun berhasil diaktifkan di cabang Makassar',
           };
         } else {
-          // Jika gagal menonaktifkan akun
-          return false;
+          return {
+            status: 'error',
+            message: 'Gagal mengaktifkan akun di cabang Makassar',
+          };
         }
       } catch (error) {
-        console.error('Error menonaktifkan akun:', error);
+        console.error('Error mengaktifkan akun:', error);
         return {
           status: 'error',
-          message: `Gagal menonaktifkan akun di cabang Medan: ${error.message}`,
+          message: `Gagal mengaktifkan akun di cabang Makassar: ${error.message}`,
         };
       }
     }
 
-    // Jika kode cabang tidak cocok
     return {
       status: 'error',
       message: 'Kode cabang tidak ditemukan atau tidak valid',
     };
   }
-  @MessagePattern({ cmd: '31' }) // Pastikan '27' ini sesuai dengan yang dikirimkan
+
+  /**
+   * Aktifkan akun di database EMKL Bitung
+   * Command: '31'
+   */
+  @MessagePattern({ cmd: '31' })
   async aktifAkunEmklBtg(@Payload() payload: any) {
-    // Cek apakah kode cabang cocok
-    // if (payload.kodeCabang === '27') {
     if (payload.kodeCabang === '31') {
       try {
-        const nonaktif = await this.aktifEmklBtg(payload.id);
-        // Jika nonaktif berhasil
-        if (nonaktif) {
+        const aktif = await this.aktifEmklBtg(payload.id);
+
+        if (aktif) {
           return {
             status: 'success',
-            message: 'Akun berhasil dinonaktifkan di cabang Medan',
+            message: 'Akun berhasil diaktifkan di cabang Bitung',
           };
         } else {
-          // Jika gagal menonaktifkan akun
-          return false;
+          return {
+            status: 'error',
+            message: 'Gagal mengaktifkan akun di cabang Bitung',
+          };
         }
       } catch (error) {
-        console.error('Error menonaktifkan akun:', error);
+        console.error('Error mengaktifkan akun:', error);
         return {
           status: 'error',
-          message: `Gagal menonaktifkan akun di cabang Medan: ${error.message}`,
+          message: `Gagal mengaktifkan akun di cabang Bitung: ${error.message}`,
         };
       }
     }
 
-    // Jika kode cabang tidak cocok
     return {
       status: 'error',
       message: 'Kode cabang tidak ditemukan atau tidak valid',
     };
   }
 
-  @MessagePattern({ cmd: '1135' }) // Pastikan '27' ini sesuai dengan yang dikirimkan
+  /**
+   * Aktifkan akun di database EMKL Semarang
+   * Command: '1135'
+   */
+  @MessagePattern({ cmd: '1135' })
   async aktifAkunEmklSmg(@Payload() payload: any) {
-    // Cek apakah kode cabang cocok
-    // if (payload.kodeCabang === '27') {
     if (payload.kodeCabang === '1135') {
       try {
-        const nonaktif = await this.aktifEmklSmg(payload.id);
-        // Jika nonaktif berhasil
-        if (nonaktif) {
+        const aktif = await this.aktifEmklSmg(payload.id);
+
+        if (aktif) {
           return {
             status: 'success',
-            message: 'Akun berhasil dinonaktifkan di cabang Medan',
+            message: 'Akun berhasil diaktifkan di cabang Semarang',
           };
         } else {
-          // Jika gagal menonaktifkan akun
-          return false;
+          return {
+            status: 'error',
+            message: 'Gagal mengaktifkan akun di cabang Semarang',
+          };
         }
       } catch (error) {
-        console.error('Error menonaktifkan akun:', error);
+        console.error('Error mengaktifkan akun:', error);
         return {
           status: 'error',
-          message: `Gagal menonaktifkan akun di cabang Medan: ${error.message}`,
+          message: `Gagal mengaktifkan akun di cabang Semarang: ${error.message}`,
         };
       }
     }
 
-    // Jika kode cabang tidak cocok
     return {
       status: 'error',
       message: 'Kode cabang tidak ditemukan atau tidak valid',
     };
   }
 
-  @MessagePattern({ cmd: '1136' }) // Pastikan '27' ini sesuai dengan yang dikirimkan
+  /**
+   * Aktifkan akun di database Trucking Medan
+   * Command: '1136'
+   */
+  @MessagePattern({ cmd: '1136' })
   async aktifAkunTruckMdn(@Payload() payload: any) {
-    // Cek apakah kode cabang cocok
-    // if (payload.kodeCabang === '27') {
     if (payload.kodeCabang === '1136') {
       try {
-        const nonaktif = await this.aktifTruckingMedan(payload.id);
-        // Jika nonaktif berhasil
-        if (nonaktif) {
+        const aktif = await this.aktifTruckingMedan(payload.id);
+
+        if (aktif) {
           return {
             status: 'success',
-            message: 'Akun berhasil dinonaktifkan di cabang Medan',
+            message: 'Akun berhasil diaktifkan di cabang Trucking Medan',
           };
         } else {
-          // Jika gagal menonaktifkan akun
-          return false;
+          return {
+            status: 'error',
+            message: 'Gagal mengaktifkan akun di cabang Trucking Medan',
+          };
         }
       } catch (error) {
-        console.error('Error menonaktifkan akun:', error);
+        console.error('Error mengaktifkan akun:', error);
         return {
           status: 'error',
-          message: `Gagal menonaktifkan akun di cabang Medan: ${error.message}`,
+          message: `Gagal mengaktifkan akun di cabang Trucking Medan: ${error.message}`,
         };
       }
     }
 
-    // Jika kode cabang tidak cocok
     return {
       status: 'error',
       message: 'Kode cabang tidak ditemukan atau tidak valid',

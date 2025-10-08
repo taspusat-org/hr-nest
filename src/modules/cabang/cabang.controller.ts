@@ -45,12 +45,16 @@ export class CabangController {
     @Body(new ZodValidationPipe(CreateCabangSchema)) request: CreateCabangDto,
     @Req() req,
   ) {
+    const trx = await dbMssql.transaction();
     const kodecabangexits = await isRecordExist(
       'kodecabang',
       request.kodecabang,
       'cabang',
+      undefined,
+      trx,
     );
     if (kodecabangexits) {
+      await trx.rollback();
       throw new HttpException(
         {
           statusCode: HttpStatus.BAD_REQUEST,
@@ -59,7 +63,6 @@ export class CabangController {
         HttpStatus.BAD_REQUEST,
       );
     }
-    const trx = await dbMssql.transaction();
     try {
       request.modifiedby = req.user?.user?.username || 'unknown';
 
@@ -189,13 +192,16 @@ export class CabangController {
     @Body(new ZodValidationPipe(UpdateCabangSchema)) request: UpdateCabangDto,
     @Req() req,
   ) {
+    const trx = await dbMssql.transaction();
     const kodecabangexits = await isRecordExist(
       'kodecabang',
       request.kodecabang,
       'cabang',
       Number(+id),
+      trx,
     );
     if (kodecabangexits) {
+      await trx.rollback();
       throw new HttpException(
         {
           statusCode: HttpStatus.BAD_REQUEST,
@@ -204,7 +210,6 @@ export class CabangController {
         HttpStatus.BAD_REQUEST,
       );
     }
-    const trx = await dbMssql.transaction();
     try {
       request.modifiedby = req.user?.user?.username || 'unknown';
 
@@ -214,6 +219,7 @@ export class CabangController {
       return result;
     } catch (error) {
       console.error('Error updating cabang in controller:', error);
+      await trx.rollback();
       throw new Error('Failed to update cabang');
     }
   }

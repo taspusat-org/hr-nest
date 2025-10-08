@@ -58,8 +58,13 @@ export class UserController {
       'username',
       data.username,
       'users',
+      undefined,
+      trx,
     );
+    console.log('usernameexist', usernameexist);
+    console.log('data.username', data.username);
     if (usernameexist) {
+      await trx.rollback();
       throw new HttpException(
         {
           statusCode: HttpStatus.BAD_REQUEST,
@@ -124,8 +129,10 @@ export class UserController {
         data.username,
         'users',
         Number(id),
+        trx,
       );
       if (usernameExists) {
+        await trx.rollback();
         throw new HttpException(
           {
             statusCode: HttpStatus.BAD_REQUEST,

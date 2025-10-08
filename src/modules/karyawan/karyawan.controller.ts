@@ -494,13 +494,15 @@ export class KaryawanController {
       if (!existingData) {
         throw new Error('Karyawan not found');
       }
+
+      // Handle resign process with transaction safety
       if (
         existingData.tglresign === null &&
         updateKaryawanDto.tglresign !== null &&
         updateKaryawanDto.tglresign !== undefined &&
         updateKaryawanDto.tglresign !== ''
       ) {
-        const timeoutDuration = 10000; // Timeout dalam milidetik
+        // Set status aktif to resign
         updateKaryawanDto.statusaktif = 132;
         const kodeCabang = req.user.cabang_id;
         const cabangCodes: string[] = [];
@@ -517,10 +519,11 @@ export class KaryawanController {
             '1136 RESIGN',
           );
         } else {
-          cabangCodes.push(`${kodeCabang} RESIGN`); // Menambahkan " RESIGN" di belakang kodeCabang
+          cabangCodes.push(`${kodeCabang} RESIGN`);
         }
 
-        // Kirim request ke RabbitMQ untuk setiap cabang
+        // Kirim request ke RabbitMQ untuk setiap cabang dengan timeout
+        const timeoutDuration = 10000; // 10 detik timeout
         const requestPromises = cabangCodes.map((cabangCode) =>
           Promise.race([
             this.rabbitmqService.client
@@ -540,33 +543,43 @@ export class KaryawanController {
           ]),
         );
 
-        // Tunggu sampai semua request selesai
-        const responses = await Promise.all(requestPromises);
+        try {
+          // Tunggu sampai semua request selesai
+          const responses = await Promise.all(requestPromises);
 
-        // Jika ada response yang gagal, lemparkan error dan rollback transaksi
-        for (const response of responses) {
-          if (!response || response.status !== 'success') {
-            const errorMessage =
-              response?.message ||
-              'Gagal menonaktifkan akun di salah satu cabang';
-            throw new Error(errorMessage);
+          // Validasi semua response harus sukses
+          for (const response of responses) {
+            if (!response || response.status !== 'success') {
+              const errorMessage =
+                response?.message ||
+                'Gagal menonaktifkan akun di salah satu cabang';
+              throw new Error(errorMessage);
+            }
           }
+        } catch (error) {
+          // Jika ada error dari RabbitMQ, rollback transaksi
+          console.error('Error dari RabbitMQ:', error);
+          throw new Error(
+            `Gagal menonaktifkan akun di cabang: ${error.message}`,
+          );
         }
       } else if (
         existingData.tglresign !== null &&
         updateKaryawanDto.tglresign === ''
       ) {
-        const timeoutDuration = 10000; // Timeout dalam milidetik
+        // Handle re-activation process
+        updateKaryawanDto.statusaktif = 131;
         const kodeCabang = req.user.cabang_id;
         const cabangCodes: string[] = [];
-        updateKaryawanDto.statusaktif = 131;
 
         if (kodeCabang == 26) {
           cabangCodes.push('26', '27', '28', '29', '30', '31', '1135', '1136');
         } else {
-          cabangCodes.push(`${kodeCabang}`); // Menambahkan " RESIGN" di belakang kodeCabang
+          cabangCodes.push(`${kodeCabang}`);
         }
-        // Kirim request ke RabbitMQ untuk setiap cabang
+
+        // Kirim request ke RabbitMQ untuk setiap cabang dengan timeout
+        const timeoutDuration = 10000; // 10 detik timeout
         const requestPromises = cabangCodes.map((cabangCode) =>
           Promise.race([
             this.rabbitmqService.client
@@ -586,19 +599,28 @@ export class KaryawanController {
           ]),
         );
 
-        // Tunggu sampai semua request selesai
-        const responses = await Promise.all(requestPromises);
+        try {
+          // Tunggu sampai semua request selesai
+          const responses = await Promise.all(requestPromises);
 
-        // Jika ada response yang gagal, lemparkan error dan rollback transaksi
-        for (const response of responses) {
-          if (!response || response.status !== 'success') {
-            const errorMessage =
-              response?.message ||
-              'Gagal menonaktifkan akun di salah satu cabang';
-            throw new Error(errorMessage);
+          // Validasi semua response harus sukses
+          for (const response of responses) {
+            if (!response || response.status !== 'success') {
+              const errorMessage =
+                response?.message ||
+                'Gagal mengaktifkan akun di salah satu cabang';
+              throw new Error(errorMessage);
+            }
           }
+        } catch (error) {
+          // Jika ada error dari RabbitMQ, rollback transaksi
+          console.error('Error dari RabbitMQ:', error);
+          throw new Error(
+            `Gagal mengaktifkan akun di cabang: ${error.message}`,
+          );
         }
       }
+
       updateKaryawanDto.modifiedby = req.user?.user?.username || 'unknown';
 
       // If a new photo is uploaded, delete the old one
@@ -629,14 +651,14 @@ export class KaryawanController {
         trx,
       );
 
-      // Commit the transaction
+      // Commit the transaction only if everything succeeds
       await trx.commit();
       return result;
     } catch (error) {
-      // Rollback in case of an error
-      console.error('error', error);
+      // Rollback in case of any error
+      console.error('Error updating Karyawan:', error);
       await trx.rollback();
-      throw new Error(`Error updating Karyawan: ${error}`);
+      throw new Error(`Error updating Karyawan: ${error.message}`);
     }
   }
 

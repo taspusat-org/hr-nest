@@ -54,9 +54,16 @@ export class CcemailController {
     const trx = await dbMssql.transaction();
 
     try {
-      const emailExist = await isRecordExist('email', data.email, 'ccemail');
+      const emailExist = await isRecordExist(
+        'email',
+        data.email,
+        'ccemail',
+        undefined,
+        trx,
+      );
 
       if (emailExist) {
+        await trx.rollback();
         throw new HttpException(
           {
             statusCode: HttpStatus.BAD_REQUEST,
@@ -135,8 +142,10 @@ export class CcemailController {
         data.email,
         'ccemail',
         Number(id),
+        trx,
       );
       if (emailExist) {
+        await trx.rollback();
         throw new HttpException(
           {
             statusCode: HttpStatus.BAD_REQUEST,

@@ -143,17 +143,17 @@ export class IzinService {
             .orWhere('u.id', 'like', `%${formattedSearch}%`)
             .orWhere('u.karyawan_id', 'like', `%${formattedSearch}%`)
             .orWhere(
-              dbMssql.raw("FORMAT(u.tglpengajuan, 'dd-MM-yyyy') like ?", [
+              trx.raw("FORMAT(u.tglpengajuan, 'dd-MM-yyyy') like ?", [
                 `%${formattedSearch}%`,
               ]),
             ) // Format tanggal tglpengajuan untuk pencarian
             .orWhere(
-              dbMssql.raw("FORMAT(u.tglizin, 'dd-MM-yyyy') like ?", [
+              trx.raw("FORMAT(u.tglizin, 'dd-MM-yyyy') like ?", [
                 `%${formattedSearch}%`,
               ]),
             ) // Format tanggal tglizin untuk pencarian
             .orWhere(
-              dbMssql.raw('CONVERT(VARCHAR(5), u.jampengajuan, 108) like ?', [
+              trx.raw('CONVERT(VARCHAR(5), u.jampengajuan, 108) like ?', [
                 `%${formattedSearch}%`,
               ]),
             ) // Format jam untuk pencarian

@@ -29,15 +29,17 @@ export class CutiapprovalController {
     },
   ) {
     const { cutiId, karyawanId, statusnonhitung } = body;
+    const trx = await dbMssql.transaction();
 
     // 1. Ambil record approval saat ini
-    const existing = await dbMssql('cutiapproval')
+    const existing = await trx('cutiapproval')
       .select('statusapproval')
       .where('cuti_id', cutiId)
       .andWhere('karyawan_id', karyawanId)
       .first();
 
     if (!existing) {
+      await trx.rollback();
       throw new HttpException(
         {
           statusCode: HttpStatus.NOT_FOUND,
@@ -49,6 +51,7 @@ export class CutiapprovalController {
 
     // 2. Kalau sudah DISETUJUI atau sudah REJECTED, lempar error sesuai kondisi
     if (existing.statusapproval === 1) {
+      await trx.rollback();
       throw new HttpException(
         {
           statusCode: HttpStatus.BAD_REQUEST,
@@ -58,6 +61,7 @@ export class CutiapprovalController {
       );
     }
     if (existing.statusapproval === 2) {
+      await trx.rollback();
       throw new HttpException(
         {
           statusCode: HttpStatus.BAD_REQUEST,
@@ -67,6 +71,7 @@ export class CutiapprovalController {
       );
     }
     if (existing.statusapproval === 3) {
+      await trx.rollback();
       throw new HttpException(
         {
           statusCode: HttpStatus.BAD_REQUEST,
@@ -76,7 +81,6 @@ export class CutiapprovalController {
       );
     }
     // 3. Kalau belum, lanjutkan transaksi approve
-    const trx = await dbMssql.transaction();
     try {
       const updated = await this.cutiapprovalService.approve(
         cutiId,
@@ -108,15 +112,17 @@ export class CutiapprovalController {
     },
   ) {
     const { cutiId, karyawanId, alasanpenolakan } = body;
+    const trx = await dbMssql.transaction();
 
     // 1. Ambil record approval saat ini
-    const existing = await dbMssql('cutiapproval')
+    const existing = await trx('cutiapproval')
       .select('statusapproval')
       .where('cuti_id', cutiId)
       .andWhere('karyawan_id', karyawanId)
       .first();
 
     if (!existing) {
+      await trx.rollback();
       throw new HttpException(
         {
           statusCode: HttpStatus.NOT_FOUND,
@@ -128,6 +134,7 @@ export class CutiapprovalController {
 
     // 2. Kalau sudah REJECTED atau sudah DISETUJUI, lempar error
     if (existing.statusapproval === 2) {
+      await trx.rollback();
       throw new HttpException(
         {
           statusCode: HttpStatus.BAD_REQUEST,
@@ -138,7 +145,6 @@ export class CutiapprovalController {
     }
 
     // 3. Kalau belum, lanjutkan transaksi reject
-    const trx = await dbMssql.transaction();
     try {
       const updated = await this.cutiapprovalService.reject(
         cutiId,

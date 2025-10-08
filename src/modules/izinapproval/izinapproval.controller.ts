@@ -24,13 +24,14 @@ export class IzinapprovalController {
   ) {
     const { izinId, karyawanId } = body;
     const trx = await dbMssql.transaction();
-    const existing = await dbMssql('izinapproval')
+    const existing = await trx('izinapproval')
       .select('statusapproval')
       .where('izin_id', izinId)
       .andWhere('karyawan_id', karyawanId)
       .first();
 
     if (!existing) {
+      await trx.rollback();
       throw new HttpException(
         {
           statusCode: HttpStatus.NOT_FOUND,
@@ -42,6 +43,7 @@ export class IzinapprovalController {
 
     // 2. Kalau sudah DISETUJUI atau sudah REJECTED, lempar error sesuai kondisi
     if (existing.statusapproval === 151) {
+      await trx.rollback();
       throw new HttpException(
         {
           statusCode: HttpStatus.BAD_REQUEST,
@@ -51,6 +53,7 @@ export class IzinapprovalController {
       );
     }
     if (existing.statusapproval === 152) {
+      await trx.rollback();
       throw new HttpException(
         {
           statusCode: HttpStatus.BAD_REQUEST,
@@ -60,6 +63,7 @@ export class IzinapprovalController {
       );
     }
     if (existing.statusapproval === 153) {
+      await trx.rollback();
       throw new HttpException(
         {
           statusCode: HttpStatus.BAD_REQUEST,

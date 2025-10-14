@@ -22,7 +22,6 @@ export class ParameterService {
     private readonly utilsService: UtilsService,
     private readonly logTrailService: LogtrailService,
   ) {}
-
   async create(data: any, trx: any) {
     try {
       const {
@@ -34,18 +33,24 @@ export class ParameterService {
         limit,
         ...insertData
       } = data;
+
+      // Uppercase string values
       Object.keys(insertData).forEach((key) => {
         if (typeof insertData[key] === 'string') {
           insertData[key] = insertData[key].toUpperCase();
         }
       });
+
       const insertedItems = await trx(this.tableName)
         .insert(insertData)
         .returning('*');
 
       const newItem = insertedItems[0];
 
-      // Siapkan query dasar dengan alias "m" untuk tabel utama
+      // Hapus semua cache yang terkait dengan parameter
+      await this.clearParameterCache();
+
+      // Query untuk mencari posisi item baru
       const query = trx(this.tableName)
         .select(
           'id',
@@ -66,9 +71,9 @@ export class ParameterService {
           ),
         )
         .orderBy(sortBy ? `${sortBy}` : 'id', sortDirection || 'desc')
-        .where('id', '<=', newItem.id); // Filter berdasarkan ID yang lebih kecil atau sama dengan newItem.id
+        .where('id', '<=', newItem.id);
 
-      // Perbaikan bagian filters
+      // Apply search filter
       if (search) {
         query.where((builder) => {
           builder
@@ -80,11 +85,11 @@ export class ParameterService {
             .orWhere('type', 'like', `%${search}%`)
             .orWhere('default', 'like', `%${search}%`)
             .orWhere('modifiedby', 'like', `%${search}%`)
-
             .orWhere('info', 'like', `%${search}%`);
         });
       }
 
+      // Apply column filters
       if (filters) {
         for (const [key, value] of Object.entries(filters)) {
           if (value) {
@@ -100,10 +105,9 @@ export class ParameterService {
         }
       }
 
-      // Ambil hasil query yang terfilter
       const filteredItems = await query;
 
-      // Cari index item baru di hasil yang sudah difilter
+      // Find index of new item
       const itemIndex = filteredItems.findIndex(
         (item) => item.id === newItem.id,
       );
@@ -113,15 +117,8 @@ export class ParameterService {
       }
 
       const pageNumber = Math.floor(itemIndex / limit) + 1;
-      const endIndex = pageNumber * limit;
 
-      // Ambil data hingga halaman yang mencakup item baru
-      const limitedItems = filteredItems.slice(0, endIndex);
-      // Simpan ke Redis
-      await this.redisService.set(
-        `${this.tableName}-allItems`,
-        JSON.stringify(limitedItems),
-      );
+      // Log trail
       await this.logTrailService.create(
         {
           namatabel: this.tableName,
@@ -134,6 +131,7 @@ export class ParameterService {
         },
         trx,
       );
+
       return {
         newItem,
         pageNumber,
@@ -152,27 +150,58 @@ export class ParameterService {
     isLookUp,
   }: FindAllParams) {
     try {
-      let { page, limit } = pagination;
-
+      let { page, limit } = pagination ?? {};
       page = page ?? 1;
       limit = limit ?? 0;
+
+      // Generate unique cache key based on query parameters
+      const cacheKey = this.generateCacheKey({
+        search,
+        filters,
+        page,
+        limit,
+        sort,
+        isLookUp,
+      });
+      console.log('filters', filters);
+      // Check if data exists in cache
+      const cachedData = await this.redisService.get(cacheKey);
+      if (cachedData) {
+        const parsedCache = JSON.parse(cachedData);
+        console.log('parsedCache', parsedCache);
+        // Pastikan cache memiliki data yang valid (array tidak kosong)
+        if (
+          parsedCache.data &&
+          Array.isArray(parsedCache.data) &&
+          parsedCache.data.length > 0
+        ) {
+          console.log('Data diambil dari cache:', cacheKey);
+          return parsedCache;
+        }
+        // Jika data kosong, hapus cache yang tidak valid
+        console.log('Cache data kosong, akan query ulang dari database');
+        await this.redisService.del(cacheKey);
+      }
+
+      console.log('Data diambil dari database:', cacheKey);
+
+      // Handle lookup mode
       if (isLookUp) {
-        // Count the total number of records in the ACO table (assuming 'aco' is the table)
         const acoCountResult = await dbMssql(this.tableName)
           .count('id as total')
           .first();
 
         const acoCount = acoCountResult?.total || 0;
 
-        // If there are more than 500 ACO records, limit the results
         if (Number(acoCount) > 500) {
           return { data: { type: 'json' } };
         } else {
-          limit = 0; // If ACO records are below 500, return all data
+          limit = 0;
         }
       }
-      const offset = (page - 1) * limit;
 
+      // Query database
+      const offset = (page - 1) * limit;
       const query = dbMssql(this.tableName).select(
         'id',
         'grp',
@@ -187,16 +216,19 @@ export class ParameterService {
         dbMssql.raw("FORMAT(created_at, 'dd-MM-yyyy HH:mm:ss') AS created_at"),
         dbMssql.raw("FORMAT(updated_at, 'dd-MM-yyyy HH:mm:ss') AS updated_at"),
       );
+
       if (limit > 0) {
         query.limit(limit).offset(offset);
       }
 
+      // Apply search
       if (search) {
         query.where((builder) => {
           builder.orWhere('text', 'like', `%${search}%`);
         });
       }
 
+      // Apply filters
       if (filters) {
         for (const [key, value] of Object.entries(filters)) {
           if (value) {
@@ -205,6 +237,8 @@ export class ParameterService {
                 `FORMAT(${key}, 'dd-MM-yyyy HH:mm:ss') LIKE ?`,
                 [`%${value}%`],
               );
+            } else if (key === 'grp' || key === 'subgrp') {
+              query.andWhere(key, '=', value);
             } else {
               query.andWhere(key, 'like', `%${value}%`);
             }
@@ -212,21 +246,25 @@ export class ParameterService {
         }
       }
 
-      const result = await dbMssql(this.tableName).count('id as total').first();
-      const total = result?.total as number;
-
-      const totalPages = Math.ceil(total / limit);
+      // Apply sorting
       if (sort?.sortBy && sort?.sortDirection) {
         query.orderBy(sort.sortBy, sort.sortDirection);
       }
+
+      // Get total count
+      const result = await dbMssql(this.tableName).count('id as total').first();
+      const total = result?.total as number;
+      const totalPages = limit > 0 ? Math.ceil(total / limit) : 1;
+
+      // Execute query
+      const parameters = await query;
       const responseType = Number(total) > 500 ? 'json' : 'local';
 
-      const parameters = await query;
-
-      return {
+      // Prepare response
+      const responseObject = {
         data: parameters,
-        total,
         type: responseType,
+        total,
         pagination: {
           currentPage: page,
           totalPages: totalPages,
@@ -234,12 +272,65 @@ export class ParameterService {
           itemsPerPage: limit,
         },
       };
+
+      // Save to cache only if data is not empty
+      // Cache dengan TTL 1 jam (3600 detik)
+      if (parameters && parameters.length > 0) {
+        await this.redisService.set(cacheKey, JSON.stringify(responseObject));
+        console.log('Data disimpan ke cache:', cacheKey);
+      } else {
+        console.log('Data kosong, tidak disimpan ke cache');
+      }
+
+      return responseObject;
     } catch (error) {
       console.error('Error fetching parameters:', error);
       throw new Error('Failed to fetch parameters');
     }
   }
 
+  /**
+   * Generate unique cache key based on query parameters
+   */
+  private generateCacheKey(params: any): string {
+    const {
+      search = '',
+      filters = {},
+      page = 1,
+      limit = 0,
+      sort = {},
+      isLookUp = false,
+    } = params;
+
+    // Create a stable string representation of parameters
+    const filterStr = JSON.stringify(filters);
+    const sortStr = JSON.stringify(sort);
+
+    return `${this.tableName}:list:${search}:${filterStr}:${sortStr}:${page}:${limit}:${isLookUp}`;
+  }
+
+  /**
+   * Clear all parameter cache
+   */
+  private async clearParameterCache(): Promise<void> {
+    try {
+      // Delete all keys matching the pattern
+      const pattern = `${this.tableName}:list:*`;
+      const deletedCount = await this.redisService.delPattern(pattern);
+
+      if (deletedCount > 0) {
+        console.log(
+          `Cleared ${deletedCount} cache entries for ${this.tableName}`,
+        );
+      }
+
+      // Also clear the old allItems cache if exists
+      await this.redisService.del(`${this.tableName}-allItems`);
+    } catch (error) {
+      console.error('Error clearing cache:', error);
+      // Don't throw error, just log it
+    }
+  }
   async getById(id: number, trx: any) {
     try {
       // Fetch data by id from the database table

@@ -61,8 +61,6 @@ export class UserController {
       undefined,
       trx,
     );
-    console.log('usernameexist', usernameexist);
-    console.log('data.username', data.username);
     if (usernameexist) {
       await trx.rollback();
       throw new HttpException(

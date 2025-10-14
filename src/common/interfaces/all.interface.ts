@@ -11,6 +11,7 @@ export interface FindAllParams {
     sortBy: string;
     sortDirection: 'asc' | 'desc';
   };
+  flag?: string;
 }
 
 export interface Ability {

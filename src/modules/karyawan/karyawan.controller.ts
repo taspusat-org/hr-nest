@@ -130,7 +130,7 @@ export class KaryawanController {
         throw new BadRequestException('Umur karyawan harus minimal 17 tahun');
       }
     }
-
+    const id = req.user.user.karyawan_id;
     try {
       data.modifiedby = req.user?.user?.username || 'unknown';
 
@@ -138,7 +138,25 @@ export class KaryawanController {
         const fileName = await this.utilsService.compressImageKaryawan(foto);
         data.foto = fileName;
       }
-      const result = await this.karyawanService.create(data, trx);
+      const role_id_user = req.user.user.role_id;
+      let role_id = '';
+      let cabang_id = '';
+      if (!role_id_user?.includes('1')) {
+        const userCabang = req.user.cabang_id;
+        // kalau user di cabang 29, izinkan juga lihat cabang 30
+        cabang_id = userCabang;
+      }
+      if (role_id_user?.includes('4') && !role_id_user?.includes('1')) {
+        role_id = 'APPROVAL';
+      }
+
+      const result = await this.karyawanService.create(
+        data,
+        trx,
+        id,
+        role_id,
+        cabang_id,
+      );
       await trx.commit();
       return result;
     } catch (error) {
@@ -264,39 +282,48 @@ export class KaryawanController {
   @UseGuards(AuthGuard)
   @UsePipes(new ZodValidationPipe(FindAllSchema))
   async findAllCabang(@Req() req, @Query() query: FindAllDto) {
-    const {
-      search,
-      page,
-      limit,
-      sortBy,
-      sortDirection,
-      isLookUp,
-      ...filters
-    }: { [key: string]: any } = query;
+    const trx = await dbMssql.transaction();
+    try {
+      const {
+        search,
+        page,
+        limit,
+        sortBy,
+        sortDirection,
+        isLookUp,
+        ...filters
+      }: { [key: string]: any } = query;
 
-    const role_id = req.user.user.role_id;
-    if (!role_id?.includes('1')) {
-      const userCabang = req.user.cabang_id;
-      // kalau user di cabang 29, izinkan juga lihat cabang 30
-      filters.cabang_id = userCabang;
-    }
-    if (role_id?.includes('4') && !role_id?.includes('1')) {
-      filters.role_id = 'APPROVAL';
-    }
-    const id = req.user.user.karyawan_id;
-    // ... rest tetap sama ...
-    const params: FindAllParams = {
-      search,
-      filters,
-      pagination: { page: page || 1, limit },
-      isLookUp: isLookUp === 'true',
-      sort: {
-        sortBy: sortBy || 'namakaryawan',
-        sortDirection: sortDirection || 'asc',
-      },
-    };
+      const role_id = req.user.user.role_id;
+      if (!role_id?.includes('1')) {
+        const userCabang = req.user.cabang_id;
+        // kalau user di cabang 29, izinkan juga lihat cabang 30
+        filters.cabang_id = userCabang;
+      }
+      if (role_id?.includes('4') && !role_id?.includes('1')) {
+        filters.role_id = 'APPROVAL';
+      }
+      const id = req.user.user.karyawan_id;
+      // ... rest tetap sama ...
+      const params: FindAllParams = {
+        search,
+        filters,
+        pagination: { page: page || 1, limit },
+        isLookUp: isLookUp === 'true',
+        sort: {
+          sortBy: sortBy || 'namakaryawan',
+          sortDirection: sortDirection || 'asc',
+        },
+      };
 
-    return this.karyawanService.findAllCabang(params, id);
+      const result = await this.karyawanService.findAllCabang(params, id, trx);
+      await trx.commit();
+      return result;
+    } catch (error) {
+      console.error('Error:', error);
+      await trx.rollback();
+      throw new Error(`Error creating parameter: ${error.message}`);
+    }
   }
 
   @Get('/export')

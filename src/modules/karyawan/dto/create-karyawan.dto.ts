@@ -40,6 +40,7 @@ export const CreateKaryawanSchema = z.object({
   modifiedby: z.string().max(200).nullable().optional(),
   created_at: z.date().nullable().optional(),
   updated_at: z.date().nullable().optional(),
+  filters: z.any().nullable().optional(),
 });
 
 export type CreateKaryawanDto = z.infer<typeof CreateKaryawanSchema>;

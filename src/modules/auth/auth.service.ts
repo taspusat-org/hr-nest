@@ -62,7 +62,6 @@ export class AuthService {
     const cabangKaryawan = await dbMssql('usercabang')
       .select('cabang_id')
       .where('user_id', user.id);
-    console.log('cabangKaryawan', cabangKaryawan);
     const cabangIds: number[] = cabangKaryawan.map(
       ({ cabang_id }) => cabang_id,
     );
@@ -91,7 +90,7 @@ export class AuthService {
     const accessToken = this.jwtService.sign(payload, {
       expiresIn: accessTokenExpiresIn,
     });
-    const refreshToken = this.jwtService.sign(payload, { expiresIn: '1h' });
+    const refreshToken = this.jwtService.sign(payload, { expiresIn: '3h' });
 
     return {
       accessToken,
@@ -184,7 +183,7 @@ export class AuthService {
         expiresIn: accessTokenExpiresIn,
       });
 
-      const refreshToken = this.jwtService.sign(payload, { expiresIn: '1h' });
+      const refreshToken = this.jwtService.sign(payload, { expiresIn: '3h' });
 
       return {
         accessToken,

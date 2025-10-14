@@ -4,45 +4,59 @@ import { Client, ClientOptions, LocalAuth, Message } from 'whatsapp-web.js';
 import * as qrcode from 'qrcode-terminal';
 import { dbMssql } from 'src/common/utils/db';
 import puppeteer from 'puppeteer-core';
+import * as path from 'path';
+import * as fs from 'fs';
 @Injectable()
 export class BotService {
   private bot: TelegramBot;
   private chatId: string = '-1002388728181'; // Ganti dengan ID grup Anda
   private whatsappGroupId: string = '6281321232720-1583291142@g.us'; // Ganti dengan ID grup WhatsApp
   private whatsappClient: Client;
-  constructor() {
+  async onModuleInit() {
     const token = '7025202986:AAHLW64Ght3115fBdvRGaWqLHK-Dlimtvk4'; // Ganti dengan token bot Anda
     this.bot = new TelegramBot(token);
-    const options: ClientOptions = {
-      puppeteer: { headless: true }, // Gunakan headless: false untuk debugging
-    };
-
-    this.whatsappClient = new Client(options);
-
+    this.whatsappClient = new Client({
+      authStrategy: new LocalAuth(), // Stores session data locally
+      puppeteer: { headless: true }, // Run in headless mode
+    });
     this.whatsappClient.on('qr', (qr: string) => {
-      console.log('QR received, generating...');
-      qrcode.generate(qr, { small: true });
-      console.log('Scan this QR code with your WhatsApp app to log in');
+      this.generateQRCode(qr);
     });
 
+    // Debugging: Log jika login gagal
+    this.whatsappClient.on('auth_failure', (msg) => {
+      console.log('Authentication failed:', msg);
+    });
+
+    // Menangani saat WhatsApp client siap
     this.whatsappClient.on('ready', () => {
       console.log('WhatsApp client is ready!');
     });
 
-    this.whatsappClient.on('authenticated', () => {
-      console.log('WhatsApp client authenticated!');
-    });
-
-    this.whatsappClient.on('auth_failure', (message) => {
-      console.error('Authentication failed:', message);
-    });
-
+    // Debugging: Log jika client tidak dapat terkoneksi
     this.whatsappClient.on('disconnected', (reason) => {
-      console.error('WhatsApp client disconnected:', reason);
+      console.log('WhatsApp client disconnected:', reason);
     });
 
-    // Inisialisasi client WhatsApp
-    this.whatsappClient.initialize();
+    // Inisialisasi WhatsApp client
+    await this.whatsappClient.initialize();
+  }
+
+  private readonly qrFilePath = path.join(process.cwd(), 'qrcode.png');
+  async generateQRCode(qrData: string): Promise<void> {
+    // Cek apakah file QR code lama ada dan hapus jika ada
+    if (fs.existsSync(this.qrFilePath)) {
+      fs.unlinkSync(this.qrFilePath); // Menghapus file lama
+      console.log('File QR code lama dihapus.');
+    }
+
+    // Menyimpan QR code ke file PNG
+    try {
+      await qrcode.toFile(this.qrFilePath, qrData); // Menghasilkan QR code dan menyimpannya ke file
+      console.log('QR code generated and saved as qrcode.png');
+    } catch (err) {
+      console.error('Error generating QR code:', err);
+    }
   }
 
   // Fungsi untuk mengirim pesan ke grup

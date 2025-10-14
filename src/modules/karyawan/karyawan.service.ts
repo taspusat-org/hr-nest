@@ -2306,8 +2306,9 @@ export class KaryawanService {
     }
   }
   async findAllCabang(
-    { search, filters, pagination, sort }: FindAllParams,
+    { search, filters, pagination, sort, flag }: FindAllParams,
     id: any,
+    trx: any,
   ) {
     try {
       let { page, limit } = pagination;
@@ -2323,7 +2324,7 @@ export class KaryawanService {
 
       const offset = limit > 0 ? (page - 1) * limit : 0;
 
-      const query = dbMssql(this.tableName + ' as k')
+      const query = trx(this.tableName + ' as k')
         .select([
           'k.id as id',
           'k.npwp',
@@ -2356,18 +2357,14 @@ export class KaryawanService {
           'k.foto',
           'k.pengalamankerja',
           'k.modifiedby',
-          dbMssql.raw("FORMAT(k.tgllahir, 'dd-MM-yyyy') as tgllahir"),
-          dbMssql.raw("FORMAT(k.tglmasukkerja, 'dd-MM-yyyy') as tglmasukkerja"),
-          dbMssql.raw("FORMAT(k.tglresign, 'dd-MM-yyyy') as tglresign"),
-          dbMssql.raw("FORMAT(k.tglmutasi, 'dd-MM-yyyy') as tglmutasi"),
+          trx.raw("FORMAT(k.tgllahir, 'dd-MM-yyyy') as tgllahir"),
+          trx.raw("FORMAT(k.tglmasukkerja, 'dd-MM-yyyy') as tglmasukkerja"),
+          trx.raw("FORMAT(k.tglresign, 'dd-MM-yyyy') as tglresign"),
+          trx.raw("FORMAT(k.tglmutasi, 'dd-MM-yyyy') as tglmutasi"),
           'k.kodekaryawan',
           'k.keterangan',
-          dbMssql.raw(
-            "FORMAT(k.created_at, 'dd-MM-yyyy HH:mm:ss') AS created_at",
-          ),
-          dbMssql.raw(
-            "FORMAT(k.updated_at, 'dd-MM-yyyy HH:mm:ss') AS updated_at",
-          ),
+          trx.raw("FORMAT(k.created_at, 'dd-MM-yyyy HH:mm:ss') AS created_at"),
+          trx.raw("FORMAT(k.updated_at, 'dd-MM-yyyy HH:mm:ss') AS updated_at"),
 
           'p1.memo as statusaktif_memo',
           'p1.text as statusaktif_text',
@@ -2381,16 +2378,12 @@ export class KaryawanService {
           'shift.nama as shift_nama',
           'c.nama as cabang_nama',
           'j.nama as jabatan_nama',
-          dbMssql.raw('COUNT(*) OVER() AS __total_items'),
-          dbMssql.raw(
-            "COALESCE(atasan.namakaryawan, 'Tidak ada') as atasan_nama",
-          ),
+          trx.raw('COUNT(*) OVER() AS __total_items'),
+          trx.raw("COALESCE(atasan.namakaryawan, 'Tidak ada') as atasan_nama"),
 
           'thr.text as thr_text',
-          dbMssql.raw(
-            "COALESCE(de.nama, 'Tidak ada email') as daftaremail_email",
-          ),
-          dbMssql.raw(`
+          trx.raw("COALESCE(de.nama, 'Tidak ada email') as daftaremail_email"),
+          trx.raw(`
             CASE
               WHEN k.tglmasukkerja IS NOT NULL
                AND k.tglmasukkerja <= GETDATE()
@@ -2445,7 +2438,7 @@ export class KaryawanService {
         .leftJoin('logabsensi as la', 'k.absen_id', 'la.id');
       // Jika limit > 0, kita gunakan limit dan offset
       if (filters?.role_id == 'APPROVAL') {
-        const dataKaryawan = await dbMssql('karyawan')
+        const dataKaryawan = await trx('karyawan')
           .select('id')
           .where('atasan_id', id);
         query.whereIn(
@@ -2457,97 +2450,100 @@ export class KaryawanService {
         query.limit(limit).offset(offset);
       }
 
-      if (search) {
-        const sanitizedValue = String(search).replace(/\[/g, '[[]');
-        query.where((builder) => {
-          builder
-            .orWhere('k.npwp', 'like', `%${sanitizedValue}%`)
-            .orWhere('k.namakaryawan', 'like', `%${sanitizedValue}%`)
-            .orWhere('k.namaalias', 'like', `%${sanitizedValue}%`)
-            .orWhere('k.alamat', 'like', `%${sanitizedValue}%`)
-            .orWhere('k.nohp', 'like', `%${sanitizedValue}%`)
-            .orWhere('p1.memo', 'like', `%${sanitizedValue}%`)
-            .orWhere('p1.text', 'like', `%${sanitizedValue}%`)
-            .orWhere('c.nama', 'like', `%${sanitizedValue}%`);
-          // Check for nulls if the search is empty or consists of only spaces
-          // .orWhereRaw('k.tgllahir IS NULL')
-          // .orWhereRaw('k.tglmasukkerja IS NULL')
-          // .orWhereRaw('k.tglmutasi IS NULL');
-        });
-      }
+      switch (true) {
+        case !!search:
+          const sanitized = String(search).replace(/\[/g, '[[]').trim();
+          query.where((qb) => {
+            const searchFields = Object.keys(filters || {}).filter(
+              (k) =>
+                ![
+                  'tglDari',
+                  'tglSampai',
+                  'created_at',
+                  'updated_at',
+                  'info',
+                  'pengalamankerja',
+                  'kodekaryawan',
+                  'foto',
+                  'keterangan',
+                ].includes(k) && filters![k],
+            );
+            searchFields.forEach((field) => {
+              qb.orWhere(`u.${field}`, 'like', `%${sanitized}%`);
+            });
+          });
+          break;
 
-      if (filters) {
-        for (const [key, value] of Object.entries(filters)) {
-          if (key === 'role_id') continue;
-          if (value || value === ' ') {
-            // Normalisasi spasi (mengganti beberapa spasi dengan satu spasi dan trim)
-            const normalizedValue =
-              typeof value === 'string'
-                ? value.replace(/\s+/g, ' ').trim()
-                : String(value);
+        case !!filters:
+          for (const [key, value] of Object.entries(filters)) {
+            if (key === 'role_id') continue;
+            if (value || value === ' ') {
+              // Normalisasi spasi (mengganti beberapa spasi dengan satu spasi dan trim)
+              const normalizedValue =
+                typeof value === 'string'
+                  ? value.replace(/\s+/g, ' ').trim()
+                  : String(value);
 
-            // Cek apakah nilai kosong atau hanya spasi
-            if (normalizedValue === '') {
-              // Jika nilai kosong, filter untuk NULL
-              if (key === 'created_at' || key === 'updated_at') {
-                query.andWhereRaw(
-                  "FORMAT(k.??, 'dd-MM-yyyy HH:mm:ss') IS NULL",
-                  [key],
-                );
-              } else if (
-                key === 'tgllahir' ||
-                key === 'tglmasukkerja' ||
-                key === 'tglmutasi' ||
-                key === 'tglresign'
-              ) {
-                query.andWhereRaw('k.?? IS NULL', [key]);
-              } else {
-                // Jika nilai kosong atau hanya spasi, maka data dianggap NULL
-                query.andWhereRaw('k.?? IS NULL', [key]);
-              }
-            } else {
-              // Jika nilai tidak kosong, lakukan pencarian LIKE
-              if (key === 'created_at' || key === 'updated_at') {
-                query.andWhereRaw(
-                  "FORMAT(k.??, 'dd-MM-yyyy HH:mm:ss') LIKE ?",
-                  [key, `%${normalizedValue}%`],
-                );
-              } else if (
-                key === 'tgllahir' ||
-                key === 'tglmasukkerja' ||
-                key === 'tglmutasi' ||
-                key === 'tglresign'
-              ) {
-                query.andWhereRaw("FORMAT(k.??, 'dd-MM-yyyy') LIKE ?", [
-                  key,
-                  `%${normalizedValue}%`,
-                ]);
-              } else if (key === 'memo' || key === 'text') {
-                query.andWhere(`p1.${key}`, '=', value);
-              } else if (
-                key === 'statusaktif_memo' ||
-                key === 'statuskerja_memo' ||
-                key === 'statuskaryawan_memo'
-              ) {
-                query.andWhere(`p1.memo`, 'like', `%${value}%`);
-              } else if (key === 'atasan_nama') {
-                query.andWhereRaw(
-                  "CONCAT(atasan.namakaryawan, ' (', atasan.id, ')') LIKE ?",
-                  [`%${value}%`],
-                );
-              } else if (key === 'cabang_id') {
-                if (Array.isArray(value)) {
-                  query.whereIn('k.cabang_id', value);
+              // Cek apakah nilai kosong atau hanya spasi
+              if (normalizedValue === '') {
+                // Jika nilai kosong, filter untuk NULL
+                if (key === 'created_at' || key === 'updated_at') {
+                  query.andWhereRaw(
+                    "FORMAT(k.??, 'dd-MM-yyyy HH:mm:ss') IS NULL",
+                    [key],
+                  );
+                } else if (
+                  key === 'tgllahir' ||
+                  key === 'tglmasukkerja' ||
+                  key === 'tglmutasi' ||
+                  key === 'tglresign'
+                ) {
+                  query.andWhereRaw('k.?? IS NULL', [key]);
                 } else {
-                  query.andWhere('k.cabang_id', value);
+                  // Jika nilai kosong atau hanya spasi, maka data dianggap NULL
+                  query.andWhereRaw('k.?? IS NULL', [key]);
                 }
-                continue;
               } else {
-                query.andWhere(`k.${key}`, 'like', `%${value}%`);
+                // Jika nilai tidak kosong, lakukan pencarian LIKE
+                if (key === 'created_at' || key === 'updated_at') {
+                  query.andWhereRaw(
+                    "FORMAT(k.??, 'dd-MM-yyyy HH:mm:ss') LIKE ?",
+                    [key, `%${normalizedValue}%`],
+                  );
+                } else if (
+                  key === 'tgllahir' ||
+                  key === 'tglmasukkerja' ||
+                  key === 'tglmutasi' ||
+                  key === 'tglresign'
+                ) {
+                  query.andWhere(`k.${key}`, value);
+                } else if (key === 'memo' || key === 'text') {
+                  query.andWhere(`p1.${key}`, '=', value);
+                } else if (
+                  key === 'statusaktif_memo' ||
+                  key === 'statuskerja_memo' ||
+                  key === 'statuskaryawan_memo'
+                ) {
+                  query.andWhere(`p1.memo`, 'like', `%${value}%`);
+                } else if (key === 'atasan_nama') {
+                  query.andWhereRaw(
+                    "CONCAT(atasan.namakaryawan, ' (', atasan.id, ')') LIKE ?",
+                    [`%${value}%`],
+                  );
+                } else if (key === 'cabang_id') {
+                  if (Array.isArray(value)) {
+                    query.whereIn('k.cabang_id', value);
+                  } else {
+                    query.andWhere('k.cabang_id', value);
+                  }
+                  continue;
+                } else {
+                  query.andWhere(`k.${key}`, 'like', `%${value}%`);
+                }
               }
             }
           }
-        }
+          break;
       }
 
       if (sort?.sortBy && sort?.sortDirection) {
@@ -2555,32 +2551,59 @@ export class KaryawanService {
           case 'tglmasukkerja':
             query.orderBy('k.tglmasukkerja', sort.sortDirection);
             break;
-
+          case 'tgllahir':
+            query.orderBy('k.tgllahir', sort.sortDirection);
+            break;
+          case 'tglmutasi':
+            query.orderBy('k.tglmutasi', sort.sortDirection);
+            break;
+          case 'tglresign':
+            query.orderBy('k.tglresign', sort.sortDirection);
+            break;
           case 'lamabekerja':
             // urut berdasarkan alias string "X tahun, Y bulan, Z hari"
-            query.orderByRaw(`lamabekerja ${sort.sortDirection}`);
+            query.orderBy('k.tglmasukkerja', sort.sortDirection);
             break;
 
           default:
             query.orderBy(sort.sortBy, sort.sortDirection);
         }
       }
+      console.log('flag', flag);
 
-      const data = await query;
-      const total = data.length ? Number(data[0].__total_items) : 0;
-      const totalPages = limit > 0 ? Math.ceil(total / limit) : 1;
-
-      return {
-        data,
-        total,
-        pagination: {
-          currentPage: Number(page),
-          totalPages,
-          totalItems: total,
-          itemsPerPage: limit > 0 ? limit : total,
-        },
-      };
+      if (flag == 'GET POSITION') {
+        const data = await query;
+        const total = data.length ? Number(data[0].__total_items) : 0;
+        const totalPages = limit > 0 ? Math.ceil(total / limit) : 1;
+        return {
+          query: query.toQuery(),
+          data,
+          total,
+          pagination: {
+            currentPage: Number(page),
+            totalPages,
+            totalItems: total,
+            itemsPerPage: limit > 0 ? limit : total,
+          },
+        };
+      } else {
+        console.log('Masuk kesini flag nya');
+        const data = await query;
+        const total = data.length ? Number(data[0].__total_items) : 0;
+        const totalPages = limit > 0 ? Math.ceil(total / limit) : 1;
+        return {
+          data,
+          total,
+          pagination: {
+            currentPage: Number(page),
+            totalPages,
+            totalItems: total,
+            itemsPerPage: limit > 0 ? limit : total,
+          },
+        };
+      }
     } catch (error) {
+      console.log('error', error);
       console.error('Error fetching data:', error);
       throw new Error(error);
     }
@@ -2880,36 +2903,36 @@ export class KaryawanService {
     return tempFilePath;
   }
 
-  async create(data: any, trx: any) {
+  async create(body: any, trx: any, id: any, role_id: any, cabang_id: any) {
     try {
-      if (data.tglmutasi === '') {
-        data.tglmutasi = null;
-      } else if (data.tglmutasi) {
-        data.tglmutasi = new Date(data.tglmutasi);
+      if (body.tglmutasi === '') {
+        body.tglmutasi = null;
+      } else if (body.tglmutasi) {
+        body.tglmutasi = new Date(body.tglmutasi);
       }
-      if (data.tglresign === '') {
-        data.tglresign = null;
-      } else if (data.tglresign) {
-        data.tglresign = new Date(data.tglresign);
+      if (body.tglresign === '') {
+        body.tglresign = null;
+      } else if (body.tglresign) {
+        body.tglresign = new Date(body.tglresign);
       }
-      if (!data.tgllahir || data.tgllahir === '') {
-        data.tgllahir = null;
-      } else if (typeof data.tgllahir === 'string') {
-        // Misal data.tgllahir = "25-06-2002"
-        const [day, month, year] = data.tgllahir.split('-');
+      if (!body.tgllahir || body.tgllahir === '') {
+        body.tgllahir = null;
+      } else if (typeof body.tgllahir === 'string') {
+        // Misal body.tgllahir = "25-06-2002"
+        const [day, month, year] = body.tgllahir.split('-');
         // Hasil = "2002-06-25"
-        data.tgllahir = `${year}-${month}-${day}`;
+        body.tgllahir = `${year}-${month}-${day}`;
       }
-      if (!data.tglmasukkerja || data.tglmasukkerja === '') {
-        data.tglmasukkerja = null;
-      } else if (typeof data.tglmasukkerja === 'string') {
-        const [day, month, year] = data.tglmasukkerja.split('-');
-        data.tglmasukkerja = `${year}-${month}-${day}`;
+      if (!body.tglmasukkerja || body.tglmasukkerja === '') {
+        body.tglmasukkerja = null;
+      } else if (typeof body.tglmasukkerja === 'string') {
+        const [day, month, year] = body.tglmasukkerja.split('-');
+        body.tglmasukkerja = `${year}-${month}-${day}`;
       }
 
       const currentTime = this.utilsService.getTime();
-      data.updated_at = currentTime;
-      data.created_at = currentTime;
+      body.updated_at = currentTime;
+      body.created_at = currentTime;
       // Set password otomatis menjadi '123456' dan dienkripsi
       const passwordPlain = '12345678';
       const passwordHash = await bcrypt.hash(passwordPlain, 10); // Enkripsi password
@@ -2925,7 +2948,7 @@ export class KaryawanService {
         namacabang,
         cabang_nama,
         ...insertData
-      } = data;
+      } = body;
 
       Object.keys(insertData).forEach((key) => {
         const val = insertData[key];
@@ -2950,23 +2973,9 @@ export class KaryawanService {
           rawFilters = { ...filters };
         }
       }
-
-      // 2. Paksa selalu ada karyawan_id di filterObj
-      rawFilters.cabang_id = data.cabang_id;
-
-      // 3. Gunakan filterObj di query nanti
+      rawFilters.cabang_id = cabang_id;
+      rawFilters.role_id = role_id;
       const filterObj = rawFilters;
-      // Calculate jumlahcuti based on the length of the detailCuti array
-      // if (insertData.tgllahir) {
-      //   insertData.tgllahir = convertToDateFormat(insertData.tgllahir);
-      // }
-
-      // if (insertData.tglmasukkerja) {
-      //   insertData.tglmasukkerja = convertToDateFormat(
-      //     insertData.tglmasukkerja,
-      //   );
-      // }
-      // Lakukan insert data karyawan ke dalam database
       const insertedItems = await trx('karyawan')
         .insert(insertData)
         .returning('*');
@@ -3006,129 +3015,94 @@ export class KaryawanService {
       await trx('users')
         .where('id', createUser[0].id)
         .update('menu', menuString);
-      // Siapkan query dasar untuk mendapatkan data karyawan
-      const query = trx(`${this.tableName} as k`)
-        .select([
-          'k.id as id',
-          'k.npwp',
-          'k.namakaryawan',
-          'k.namaalias',
-          'k.jeniskelamin_id',
-          'k.alamat',
-          'k.tempatlahir',
-          'k.nohp',
-          'k.agama_id',
-          'k.statuskerja_id',
-          'k.statuskaryawan_id',
-          'k.jumlahtanggungan',
-          'k.noktp',
-          'k.golongandarah_id',
-          'k.cabang_id',
-          'k.jabatan_id',
-          'k.tglmutasi',
-          'k.atasan_id',
-          'k.thr_id',
-          'k.daftaremail_id',
-          'k.approval_id',
-          'k.kodemarketing',
-          'k.alasanberhenti',
-          'k.statusaktif',
-          'k.email',
-          'k.namaibu',
-          'k.namaayah',
-          'k.foto',
-          'k.pengalamankerja',
-          'k.modifiedby',
-          trx.raw("FORMAT(k.tgllahir, 'dd-MM-yyyy') as tgllahir"),
-          trx.raw("FORMAT(k.tglmasukkerja, 'dd-MM-yyyy') as tglmasukkerja"),
-          trx.raw("FORMAT(k.tglresign, 'dd-MM-yyyy') as tglresign"),
-          trx.raw("FORMAT(k.tglmutasi, 'dd-MM-yyyy') as tglmutasi"),
-          'k.kodekaryawan',
-          'k.keterangan',
-          trx.raw("FORMAT(k.created_at, 'dd-MM-yyyy HH:mm:ss') AS created_at"),
-          trx.raw("FORMAT(k.updated_at, 'dd-MM-yyyy HH:mm:ss') AS updated_at"),
-          'p1.memo as statusaktif_memo',
-          'p1.text as statusaktif_text',
-          'p2.text as statuskerja_text',
-          'p3.text as statuskaryawan_text',
-          'p4.text as jeniskelamin_text',
-          'p5.text as golongandarah_text',
-          'p6.text as agama_text',
-          'a.nama as approval_nama',
-          'c.nama as cabang_nama',
-          'j.nama as jabatan_nama',
-          'shift.nama as shift_nama',
-          trx.raw(
-            "COALESCE(CONCAT(atasan.namakaryawan, ' (', atasan.id, ')'), 'Tidak ada') as atasan_nama",
-          ),
-          'thr.text as thr_text',
-          trx.raw("COALESCE(de.nama, 'Tidak ada email') as daftaremail_email"),
-        ])
-        .leftJoin('parameter as p1', 'k.statusaktif', 'p1.id')
-        .leftJoin('parameter as p2', 'k.statuskerja_id', 'p2.id')
-        .leftJoin('parameter as p3', 'k.statuskaryawan_id', 'p3.id')
-        .leftJoin('parameter as p4', 'k.jeniskelamin_id', 'p4.id')
-        .leftJoin('parameter as p5', 'k.golongandarah_id', 'p5.id')
-        .leftJoin('parameter as p6', 'k.agama_id', 'p6.id')
-        .leftJoin('approvalheader as a', 'k.approval_id', 'a.id')
-        .leftJoin('shift as shift', 'k.shift_id', 'shift.id')
-        .leftJoin('cabang as c', 'k.cabang_id', 'c.id')
-        .leftJoin('jabatan as j', 'k.jabatan_id', 'j.id')
-        .leftJoin('karyawan as atasan', 'k.atasan_id', 'atasan.id')
-        .leftJoin('parameter as thr', 'k.thr_id', 'thr.id')
-        .leftJoin('daftaremail as de', 'k.daftaremail_id', 'de.id')
-        .leftJoin('logabsensi as la', 'k.absen_id', 'la.id')
-        .orderBy(sortBy ? `k.${sortBy}` : 'k.id', sortDirection || 'desc')
-        .where('k.id', '<=', newItem.id)
-        .whereNull('k.tglresign');
+      const temp = `##temp_${Math.random().toString(36).substring(2, 15)}`;
 
-      if (filterObj) {
-        for (const [key, value] of Object.entries(filterObj)) {
-          if (value) {
-            if (key === 'created_at' || key === 'updated_at') {
-              query.andWhereRaw("FORMAT(k.??, 'dd-MM-yyyy HH:mm:ss') LIKE ?", [
-                key,
-                `%${value}%`,
-              ]);
-            } else {
-              query.andWhere(`k.${key}`, 'like', `%${value}%`);
-            }
-          }
-        }
-      }
+      await trx.schema.createTable(temp, (t) => {
+        t.integer('id');
+        t.string('npwp'); // Nomor Pokok Wajib Pajak
+        t.string('namakaryawan'); // Nama Karyawan
+        t.string('namaalias'); // Nama Alias
+        t.integer('jeniskelamin_id'); // ID Jenis Kelamin (terhubung ke tabel parameter)
+        t.string('alamat'); // Alamat
+        t.string('tempatlahir'); // Tempat Lahir
+        t.string('nohp'); // Nomor HP
+        t.integer('agama_id'); // ID Agama (terhubung ke tabel parameter)
+        t.integer('statuskerja_id'); // ID Status Kerja (terhubung ke tabel parameter)
+        t.integer('statuskaryawan_id'); // ID Status Karyawan (terhubung ke tabel parameter)
+        t.integer('jumlahtanggungan'); // Jumlah Tanggungan
+        t.string('noktp'); // Nomor KTP
+        t.integer('golongandarah_id'); // ID Golongan Darah (terhubung ke tabel parameter)
+        t.integer('cabang_id'); // ID Cabang (terhubung ke tabel cabang)
+        t.integer('jabatan_id'); // ID Jabatan (terhubung ke tabel jabatan)
+        t.integer('atasan_id'); // ID Atasan (terhubung ke tabel karyawan)
+        t.integer('shift_id'); // ID Shift (terhubung ke tabel shift)
+        t.integer('thr_id'); // ID THR (terhubung ke tabel parameter)
+        t.integer('daftaremail_id'); // ID Daftar Email (terhubung ke tabel daftaremail)
+        t.integer('approval_id'); // ID Approval (terhubung ke tabel approvalheader)
+        t.integer('absen_id'); // ID Absen (terhubung ke tabel logabsensi)
+        t.string('kodemarketing'); // Kode Marketing
+        t.string('alasanberhenti'); // Alasan Berhenti
+        t.boolean('statusaktif'); // Status Aktif Karyawan
+        t.string('email'); // Email Karyawan
+        t.string('namaibu'); // Nama Ibu
+        t.string('namaayah'); // Nama Ayah
+        t.string('foto'); // Foto Karyawan
+        t.string('pengalamankerja'); // Pengalaman Kerja
+        t.string('modifiedby'); // Pengubah Data
+        t.string('tgllahir'); // Tanggal Lahir
+        t.string('tglmasukkerja'); // Tanggal Masuk Kerja
+        t.string('tglresign'); // Tanggal Resign
+        t.string('tglmutasi'); // Tanggal Mutasi
+        t.string('kodekaryawan'); // Kode Karyawan
+        t.text('keterangan'); // Keterangan
+        t.string('created_at'); // Waktu Dibuat
+        t.string('updated_at'); // Waktu Diperbarui
 
-      if (search) {
-        query.where((builder) => {
-          builder
-            .orWhere('k.namakaryawan', 'like', `%${search}%`)
-            .orWhere('k.namaalias', 'like', `%${search}%`)
-            .orWhere('k.npwp', 'like', `%${search}%`)
-            .orWhere('k.alamat', 'like', `%${search}%`)
-            .orWhere('k.tempatlahir', 'like', `%${search}%`)
-            .orWhere('k.nohp', 'like', `%${search}%`)
-            .orWhere('k.email', 'like', `%${search}%`)
-            .orWhere('k.kodekaryawan', 'like', `%${search}%`)
-            .orWhere('k.keterangan', 'like', `%${search}%`)
-            .orWhere('p1.text', 'like', `%${search}%`)
-            .orWhere('p1.memo', 'like', `%${search}%`)
-            .orWhere('p2.text', 'like', `%${search}%`)
-            .orWhere('p3.text', 'like', `%${search}%`)
-            .orWhere('p4.text', 'like', `%${search}%`)
-            .orWhere('p5.text', 'like', `%${search}%`)
-            .orWhere('p6.text', 'like', `%${search}%`)
-            .orWhere('a.nama', 'like', `%${search}%`)
-            .orWhere('c.nama', 'like', `%${search}%`)
-            .orWhere('j.nama', 'like', `%${search}%`)
-            .orWhereRaw("FORMAT(k.created_at, 'dd-MM-yyyy HH:mm:ss') LIKE ?", [
-              `%${search}%`,
-            ])
-            .orWhereRaw("FORMAT(k.updated_at, 'dd-MM-yyyy HH:mm:ss') LIKE ?", [
-              `%${search}%`,
-            ]);
-        });
-      }
+        // Fields hasil JOIN
+        t.string('statusaktif_memo'); // Memo Status Aktif (dari tabel parameter)
+        t.string('statusaktif_text'); // Text Status Aktif (dari tabel parameter)
+        t.string('statuskerja_text'); // Text Status Kerja (dari tabel parameter)
+        t.string('statuskaryawan_text'); // Text Status Karyawan (dari tabel parameter)
+        t.string('jeniskelamin_text'); // Text Jenis Kelamin (dari tabel parameter)
+        t.string('golongandarah_text'); // Text Golongan Darah (dari tabel parameter)
+        t.string('agama_text'); // Text Agama (dari tabel parameter)
 
-      const filteredItems = await query;
+        t.string('approval_nama'); // Nama Approver (dari tabel approvalheader)
+        t.string('shift_nama'); // Nama Shift (dari tabel shift)
+        t.string('cabang_nama'); // Nama Cabang (dari tabel cabang)
+        t.string('jabatan_nama'); // Nama Jabatan (dari tabel jabatan)
+
+        t.integer('__total_items'); // Total items dalam hasil query
+        t.string('atasan_nama'); // Nama Atasan (dari tabel karyawan, di-query menggunakan LEFT JOIN)
+
+        t.string('thr_text'); // THR Text (dari tabel parameter)
+        t.string('daftaremail_email'); // Email dari Daftar Email (dari tabel daftaremail)
+
+        // Field untuk lamanya bekerja
+        t.string('lamabekerja'); // Durasi kerja dalam tahun, bulan, hari (dihitung menggunakan DATEDIFF dan kondisi tanggal)
+        t.increments('position');
+      });
+
+      const { data, pagination, query } = await this.findAllCabang(
+        {
+          search,
+          filters: filterObj,
+          pagination: { page, limit: 0 },
+          sort: { sortBy, sortDirection },
+          isLookUp: false, // Set based on your requirement (e.g., lookup flag)
+          flag: 'GET POSITION',
+        },
+        id,
+        trx,
+      );
+      console.log('data', data);
+      await trx(temp).insert(trx.raw(query));
+      // let itemIndex = allItems.findIndex((item) => Number(item.id) == Number(newItem.id));
+      let itemIndex = await trx(temp)
+        .select('position')
+        .where('id', newItem.id)
+        .first();
+      itemIndex = itemIndex.position ? itemIndex.position - 1 : 0;
       if (insertData?.daftaremail_id) {
         const emailDetails = await trx('daftaremailtodetail')
           .select('toemail_id')
@@ -3196,28 +3170,18 @@ export class KaryawanService {
               : '',
             cabang: dataKaryawan.cabang_nama,
             tglmasukkerja: tglMasukKerjaFormatted, // Formatted tglmasukkerja
-            username: data.modifiedby,
+            username: body.modifiedby,
             tglinput: tglInputFormatted, // Formatted tglinput with time
           });
         }
       }
-
-      let itemIndex = filteredItems.findIndex(
-        (item) => Number(item.id) === Number(newItem.id),
-      );
-
-      if (itemIndex === -1) {
-        itemIndex = 0;
-      }
+      // Now use findAll to get the updated list with pagination, sorting, and filters
 
       const pageNumber = Math.floor(itemIndex / limit) + 1;
-      const endIndex = pageNumber * limit;
-
-      const limitedItems = filteredItems.slice(0, endIndex);
 
       await this.redisService.set(
         `${this.tableName}-allItems`,
-        JSON.stringify(limitedItems),
+        JSON.stringify(data),
       );
 
       await this.logTrailService.create(
@@ -3239,6 +3203,7 @@ export class KaryawanService {
         itemIndex,
       };
     } catch (error) {
+      console.log(error);
       throw new Error(`Error creating data: ${error.message}`);
     }
   }
